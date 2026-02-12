@@ -1,0 +1,4 @@
+mne==1.11.0
+eelbrain==0.41.2
+scipy==1.17.0
+numpy==2.4.1
