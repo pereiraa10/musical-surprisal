@@ -12,6 +12,7 @@ import numpy as np
 import os
 import pandas as pd
 from pathlib import Path
+import pickle
 import pretty_midi
 from scipy.io import loadmat
 from scipy.signal import resample, butter, filtfilt, decimate, hilbert
@@ -37,6 +38,8 @@ idyom_mat = loadmat(constants.SURPRISAL_FILE, squeeze_me=True)
 # Extracting surprisal and entropy values for each song from the IDyOM MatLab output files
 surprisal_data = {}
 entropy_data = {}
+
+os.makedirs(constants.SAVE_DIR, exist_ok=True)
 
 for song_id in unique_song_ids:
 
@@ -89,8 +92,7 @@ for SUBJECT in constants.SUBJECTS:
     events['onsets'] = [envelope.diff('time').clip(0) for envelope in envelopes]
 
     # Add duration to the events table corresponding to envelope events
-    events['duration'] = eelbrain.Var(
-        [env.time.tstop for env in events['envelope']])
+    events['duration'] = eelbrain.Var([env.time.tstop for env in events['envelope']])
 
     # CAUTION: the decim factor has been changed from 5 to 1 to see if this will fix the shape error. This seems to change the sampling rate
     # Add the eeg data itself as NDVars
@@ -100,7 +102,7 @@ for SUBJECT in constants.SUBJECTS:
     sfreq = raw.info['sfreq']
     dt = 1 / sfreq
 
-    # Make the Surprisal NDVar
+    # Make the Surprisal NDVar and Entropy NDVar
     for stimulus_id in events['event']:
 
         # make the song_IDs
@@ -160,21 +162,27 @@ for SUBJECT in constants.SUBJECTS:
     ]
 
     # Estimate the TRF: boosting(y, x, tstart, tstop[, scale_data, ...])
-    trf = eelbrain.boosting('eeg', x, -0.150, 0.750, data=events, basis=0.050, partitions=4, error='l1')
+    for indicator in x:
+        trf = eelbrain.boosting('eeg', indicator, -0.150, 0.750, data=events, basis=0.050, partitions=4, error='l1')
+        
+        filename = os.path.join(constants.SAVE_DIR, f'{SUBJECT}_{indicator}_trf.pkl')
+                
+        with open(filename, 'wb') as f:
+            pickle.dump(trf, f)
 
     # ================================================================
     # Plot the TRF
     # ================================================================
 
     # Computing the standard deviation based on the max time
-    t = trf.h[0].std('sensor').argmax('time')
-    p = eelbrain.plot.TopoButterfly(trf.h, t=t, w=10, h=4, clip='circle')
-    p.save(f'{SUBJECT}_topo_butterfly_plot.png')
-    p.close()
+    # t = trf.h[0].std('sensor').argmax('time')
+    # p = eelbrain.plot.TopoButterfly(trf.h, t=t, w=10, h=4, clip='circle')
+    # p.save(f'{SUBJECT}_topo_butterfly_plot_{x}.png')
+    # p.close()
 
     # Alternative visualization as array image
-    p = eelbrain.plot.TopoArray(trf.h, t=[0.150, 0.350, 0.500], w=6, h=4, clip='circle')
-    p.save(f'{SUBJECT}_topo_array_plot.png')
-    p.close()
+    # p = eelbrain.plot.TopoArray(trf.h, t=[0.150, 0.350, 0.500], w=6, h=4, clip='circle')
+    # p.save(f'{SUBJECT}_topo_array_plot_{x}.png')
+    # p.close()
 
-    break
+    
