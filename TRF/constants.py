@@ -13,6 +13,7 @@ MIDI_DIR = DATA_ROOT / 'diliBach_midi_4dryad'
 EEG_DIR = DATA_ROOT / 'diliBach_4dryad_CND'
 SURPRISAL_FILE = BASE_DIR / '../codeForPaper-IDyOMpy-/benchmark_results/forBenchmark_IDyOMpy/eLife_trained_on_mixed2.mat'
 
+SAVE_DIR = BASE_DIR / 'pickles'
 
 # Load the raw EEG file for a single subject and a specified frequency band
 # Adjust subject index and the low/high frequency values accordingly
