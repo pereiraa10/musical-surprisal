@@ -1,7 +1,13 @@
 IDyOM/
 codeForPaper-IDyOMpy-/
+codeForPaper-IDyOMpy-/benchmark_results
+
 OLDcodeForPaper-IDyOMpy-/
+OLDcodeForPaper-IDyOMpy-/benchmark_results
+
 *.DS_Store
 TRF/__pycache__
 TRF/.venv
 TRF/liberi_dataset
+TRF/pickles
+topo graphs/
