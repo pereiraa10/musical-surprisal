@@ -1,7 +1,5 @@
 from pathlib import Path 
 
-from pathlib import Path
-
 BASE_DIR = Path(__file__).resolve().parent  # TRF/
 
 # Define the dataset root; replace it with the proper path if you downloaded the dataset in a different location
@@ -13,7 +11,7 @@ MIDI_DIR = DATA_ROOT / 'diliBach_midi_4dryad'
 EEG_DIR = DATA_ROOT / 'diliBach_4dryad_CND'
 SURPRISAL_FILE = BASE_DIR / '../codeForPaper-IDyOMpy-/benchmark_results/forBenchmark_IDyOMpy/eLife_trained_on_mixed2.mat'
 
-SAVE_DIR = BASE_DIR / 'pickles'
+SAVE_DIR = BASE_DIR / 'pickles/encoding_decoding'
 
 # Load the raw EEG file for a single subject and a specified frequency band
 # Adjust subject index and the low/high frequency values accordingly

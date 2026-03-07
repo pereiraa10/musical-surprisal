@@ -168,55 +168,20 @@ for SUBJECT in constants.SUBJECTS:
     # Train onsets decoder
     decoder_onsets = eelbrain.boosting('onsets', 'eeg', -0.600, 0.200, data=events, partitions=4, basis=0.05, error='l1')
     
-    # ── Encoding: extract TRF weights per predictor ───────────────────────────────
-    # trf.h is an NDVar with dims (predictor × time) or (predictor × sensor × time)
-    # We store each predictor's kernel separately for easy analysis later
-    trf_weights = {}
-    for i, predictor in enumerate(x):
-        trf_weights[predictor] = trf.h[i]  # NDVar: (sensor × time) or (time,)
+    # Create the data structure for one subject and one band
+    # trf and trf_cv are saved for future research; decoder, decoder_onsets, and trials are used in this paper
 
-    # ── Encoding: extract cross-validated prediction quality ─────────────────────
-    # trf_cv.r         → correlation between predicted and actual EEG (per channel)
-    # trf_cv.r_rank    → rank correlation (more robust)
-    # trf_cv.y_pred    → the actual predicted EEG timeseries (if available)
-    encoding_stats = {
-        'r':               trf_cv.r,           # NDVar: correlation per EEG channel
-        'r_rank':          trf_cv.r_rank,      # NDVar: rank correlation per channel
-        'proportion_explained': trf_cv.proportion_explained  if hasattr(trf_cv, 'proportion_explained') else None,
+    all_data = {
+        'trf': trf,
+        'trf_cv': trf_cv,
+        'decoder': decoder,
+        'decoder_onsets': decoder_onsets,
+        'trials': {}
     }
-    
-    # ── Encoding: per-trial encoding correlation ──────────────────────────────────
-    # Convolve the TRF forward (stimulus → predicted EEG) and correlate with actual EEG
-    encoding_trials = {}
-    for trial_num in range(30):
 
-        trial_encoding = {}
-        for predictor in x:
-            # Get the stimulus feature for this trial
-            stim = events[trial_num, predictor]
-
-            # Convolve stimulus feature with the TRF kernel to get predicted EEG
-            eeg_pred = eelbrain.convolve(trf.h[x.index(predictor)], stim, name=f'predicted_eeg_{predictor}')
-
-            # Get actual EEG for this trial
-            eeg_actual = events[trial_num, 'eeg']
-
-            # Correlation between predicted and actual EEG
-            r_encoding = eelbrain.correlation_coefficient(eeg_actual, eeg_pred)
-
-            trial_encoding[predictor] = {
-                'eeg_pred':  eeg_pred,   # Predicted EEG timeseries from this feature
-                'eeg_actual': eeg_actual, # Actual EEG
-                'r':          r_encoding  # Correlation: scalar or per-channel NDVar
-            }
-
-        encoding_trials[f'trial{trial_num}'] = trial_encoding
-
-    # ── Decoding: per-trial ──────────────────────────
-    decoding_trials = {}
+    # Loop through all trials
     for trial_num in range(30):
         
-        # --- Envelope ---
         # Normalize the EEG      
         eeg_one_event = events[trial_num, 'eeg'] / decoder.x_scale
         # Predict the envelope by convolving the decoder with the EEG
@@ -229,7 +194,6 @@ for SUBJECT in constants.SUBJECTS:
         y.name = 'envelope'
         r = eelbrain.correlation_coefficient(y, y_pred)
         
-        # --- Onsets ---
         # Normalize the EEG      
         eeg_one_event_onsets = events[trial_num, 'eeg'] / decoder_onsets.x_scale
         # Predict the onsets by convolving the decoder with the EEG
@@ -242,8 +206,8 @@ for SUBJECT in constants.SUBJECTS:
         y_onsets.name = 'onsets'
         r_onsets = eelbrain.correlation_coefficient(y_onsets, y_pred_onsets)
         
-        # Store decoding trial data
-        decoding_trials[f'trial{trial_num}'] = {
+        # Store trial data
+        trial_data = {
             'y_pred': y_pred,
             'y': y,
             'r': r,
@@ -251,28 +215,12 @@ for SUBJECT in constants.SUBJECTS:
             'y_onsets': y_onsets,
             'r_onsets': r_onsets
         }
-        # print(f"Processed trial {trial_num}: envelope r={r}, onsets r={r_onsets}")
         
-    # Create the data structure for one subject and one band
-    all_data = {
-        'trf': trf,
-        'trf_cv': trf_cv,
-        'decoder': decoder,
-        'decoder_onsets': decoder_onsets,
-        # Encoding-specific extracted data
-        'encoding': {
-            'predictors':       x,
-            'trf_weights':      trf_weights,      # Per-predictor TRF kernels
-            'stats':            encoding_stats,   # CV r, r_rank, proportion explained
-            'trials':           encoding_trials,  # Per-trial predicted vs actual EEG
-        },
-
-        # Decoding-specific extracted data (renamed from 'trials' for clarity)
-        'decoding': {
-            'trials': decoding_trials
-        }
-    }
-    
+        # Add to trials dictionary
+        all_data['trials'][f'trial{trial_num}'] = trial_data
+        
+        print(f"Processed trial {trial_num}: envelope r={r}, onsets r={r_onsets}")
+   
     # ================================================================
     # Save TRF data as pickle file 
     # ================================================================      
@@ -280,7 +228,7 @@ for SUBJECT in constants.SUBJECTS:
     if not os.path.exists(constants.SAVE_DIR):
         os.makedirs(constants.SAVE_DIR)
     
-    filename = os.path.join(constants.SAVE_DIR, f'{SUBJECT}_{x}_encoding_decoding_data.pkl')
+    filename = os.path.join(constants.SAVE_DIR, f'{SUBJECT}_{x}_all_data.pkl')
             
     eelbrain.save.pickle(all_data, filename)
     
