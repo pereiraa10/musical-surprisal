@@ -9,7 +9,7 @@ DATA_ROOT = BASE_DIR / 'liberi_dataset/doi_10_5061_dryad_g1jwstqmh__v20211008'
 WAV_DIR = DATA_ROOT / 'diliBach_wav_4dryad'
 MIDI_DIR = DATA_ROOT / 'diliBach_midi_4dryad'
 EEG_DIR = DATA_ROOT / 'diliBach_4dryad_CND'
-SURPRISAL_FILE = BASE_DIR / '../codeForPaper-IDyOMpy-/benchmark_results/forBenchmark_IDyOMpy/eLife_trained_on_mixed2.mat'
+SURPRISAL_FILE = BASE_DIR / '../IDyOM/codeForPaper-IDyOMpy-/benchmark_results/forBenchmark_IDyOMpy/eLife_trained_on_mixed2.mat'
 
 SAVE_DIR = BASE_DIR / 'pickles/encoding_decoding'
 
@@ -38,5 +38,5 @@ SUBJECTS = [
     'Sub19', 
     'Sub20'
     ]
-LOW_FREQUENCY = 4
+LOW_FREQUENCY = 1
 HIGH_FREQUENCY = 8

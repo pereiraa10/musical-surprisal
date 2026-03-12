@@ -152,8 +152,8 @@ for SUBJECT in constants.SUBJECTS:
     x = [
         'envelope',
         'onsets',
-        'surprisal',
-        'entropy'
+        # 'surprisal',
+        # 'entropy'
     ]
 
     # Estimate the TRF: boosting(y, x, tstart, tstop[, scale_data, ...])
