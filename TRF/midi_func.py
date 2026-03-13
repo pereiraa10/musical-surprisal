@@ -17,10 +17,11 @@ def make_surprisal_timeseries(
     pm = pretty_midi.PrettyMIDI(midi_path)
 
     # Collect note onsets
-    onsets = []
-    for instrument in pm.instruments:
-        for note in instrument.notes:
-            onsets.append(note.start)
+    onsets = sorted(
+        note.start
+        for instrument in pm.instruments
+        for note in instrument.notes
+    )
 
     onsets = np.array(sorted(onsets))
 
