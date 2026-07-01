@@ -9,6 +9,10 @@ OLDcodeForPaper-IDyOMpy-/benchmark_results
 TRF/__pycache__
 TRF/.venv
 TRF/liberi_dataset
-TRF/pickles
+TRF/pickles/
+TRF/TRF_diagnostics_output/
+TRF/TRF_offset_diagnostic_output/
 topo graphs/
 recreating Fig 4A.xlsx/
+
+NRT/pickles*
