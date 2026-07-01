@@ -1,7 +1,6 @@
 # CNN TRF Model Context
 
-Comprehensive guide for agents working on `TRF_conv_1.py` and `TRF_conv_2_windowed.py`.
-
+Comprehensive guide for agents working on `TRF_conv_1.py` and `TRF_conv_2_windowed.py`
 ---
 
 ## What these scripts do
@@ -10,17 +9,15 @@ They model the mapping **musical stimulus features → continuous EEG** using a 
 
 The CNN-TRF is a **drop-in replacement** for the ridge TRF in `TRF_ridge_3.py`.  All upstream preprocessing is reused verbatim; only the feature→EEG model differs.  This isolation makes held-out Pearson r directly comparable across:
 
-| Script | Optimiser | Training unit |
-|--------|-----------|---------------|
-| `TRF_ridge_3.py` | Closed-form ridge | Full dataset |
-| `TRF_conv_1.py` | Adam (full trial) | 1 trial / step |
-| `TRF_conv_2_windowed.py` | Adam (mini-batch) | 64 windows / step |
-
----
+| Script | Optimiser | Training unit | Default variant |
+|--------|-----------|---------------|------------------|
+| `TRF_ridge_3.py` | Closed-form ridge | Full dataset | — |
+| `TRF_conv_1.py` | Adam (full trial) | 1 trial / step | `nonlinear` |
+| `TRF_conv_2_windowed.py` | Adam (mini-batch) | 64 windows / step | `nonlinear` |
 
 ## Dataset
 
-- **Subjects**: 19 (Sub2–Sub20; Sub1 excluded).  Musicians: Sub11–Sub20.
+- **Subjects**: 20 (Sub1–Sub20).  Musicians: Sub11–Sub20.
 - **EEG**: 64 channels, resampled to **64 Hz**.
 - **Trials per subject**: ~10 trials, variable length (~60 s each).
 - **Two model conditions** run per subject:
@@ -34,8 +31,8 @@ The CNN-TRF is a **drop-in replacement** for the ridge TRF in `TRF_ridge_3.py`. 
 ```
 SFREQ    = 64 Hz
 TMIN     = -0.1 s   → LAG_MIN = -6 taps
-TMAX     =  0.6 s   → LAG_MAX = 38 taps
-N_LAGS   = 45 taps  (receptive field)
+TMAX     =  0.6 s   → LAG_MAX = 39 taps
+N_LAGS   = 46 taps  (receptive field)
 IC_CLIP  = 15.0     (IDyOM surprisal clip)
 ```
 
@@ -79,7 +76,7 @@ GroupNorm was chosen for TRF_conv_2 because BatchNorm statistics are unstable fo
 ### Padding design — `CausalPad`
 
 The receptive field is aligned to the TRF lag window by asymmetric padding:
-- `pad_left  = LAG_MAX = 38` (past context)
+- `pad_left  = LAG_MAX = 39` (past context)
 - `pad_right = max(0, -LAG_MIN) = 6` (future context — pre-stimulus)
 
 This ensures output length == input length for any input length, including windows.
@@ -111,12 +108,18 @@ Each epoch iterates over all training trials, running one full forward/backward 
 ### `TRF_conv_2_windowed.py` — windowed mini-batch training
 
 ```
-WINDOW_SEC     = 2.0  →  WINDOW_SAMPLES = 128
+WINDOW_SEC     = 5.0  →  WINDOW_SAMPLES = 320
 HOP_SEC        = 0.1  →  HOP_SAMPLES    = 6
 BATCH_SIZE     = 64
 ```
 
-Each trial is sliced into overlapping windows.  Windows from all training trials are pooled into a `WindowDataset` and fed to a `DataLoader(shuffle=True, drop_last=False)`.  A typical epoch sees ~11k windows, providing much better gradient variance for nonlinear models.
+
+Each trial is sliced into overlapping windows using a sliding window with stride
+`HOP_SAMPLES`. Windows from all training trials are pooled into a `WindowDataset` and
+fed to a `DataLoader(shuffle=True, drop_last=False)`. A typical epoch sees on the
+order of 10k windows (depends on trial length and `WINDOW_SEC`), providing much
+better gradient variance for nonlinear models than the 1-trial-per-step scheme in
+`TRF_conv_1.py`.
 
 **Critical invariant**: no window crosses a trial boundary, so the held-out test trial never contributes any window to training.  A runtime assertion in `loocv_conv` enforces this.
 
@@ -160,6 +163,27 @@ File naming:
 
 `TRF_conv_1.py` with `linear` variant produces r ~3× higher than ridge for Sub2 (0.0759 vs 0.0236 for acoustic).  A linear model cannot legitimately beat the closed-form ridge optimum on held-out data — this is almost certainly a **regularisation mismatch** or **protocol bug**, not a genuine result.  See `TRF_conv_DIAGNOSTICS.md` for the full diagnostic plan.  **Do not interpret nonlinear results until the linear rung matches ridge.**
 
+Status update: `diagnostic_lag_alignment.py` (D1) has been run once on synthetic
+data and the conv/ridge kernels agreed, which *partially clears* the lag-alignment
+hypothesis (H1) and makes **regularisation mismatch (H2) the leading suspect**.
+D2 (shuffle test) and D3
+(regularisation sweep) have not been confirmed as run. See `EXPERIMENT_LOG.md` for
+the full run registry and open-question list.
+
+**New concern (as of this update):** the windowed `nonlinear` model
+(`TRF_conv_2_windowed.py`) is being observed to mostly predict ~0 (i.e. collapse
+toward predicting the per-trial mean) rather than tracking the held-out EEG signal —
+consistent with the optimiser settling into a low-variance local minimum rather than
+learning real structure. This is a separate, newer issue from the linear-inflation
+concern above and is the current focus of investigation.
+
+Two small diagnostic scripts exist for this specific concern (see the file map
+below): `TRF_conv_overfit_check.py` rules in/out an optimization-capacity bug
+(can the architecture drive loss below the predict-zero baseline at all, with
+regularization and early stopping disabled), and `TRF_conv_mini_windowtest.py`
+sweeps window length x overlap on a ~100-window subset of one subject to
+shortlist a windowing scheme before committing to a full LOOCV cohort run.
+
 ---
 
 ## How to edit this model
@@ -190,9 +214,12 @@ Edit `constants.SUBJECTS` (it's a list at the top of `constants.py`).
 |------|------|
 | `TRF_ridge_3.py` | Closed-form ridge TRF baseline.  Ground truth for comparison. |
 | `TRF_conv_1.py` | CNN-TRF, full-trial training, BatchNorm. |
-| `TRF_conv_2_windowed.py` | CNN-TRF, windowed mini-batch training, GroupNorm. |
+| `TRF_conv_2_windowed.py` | CNN-TRF, windowed mini-batch training, GroupNorm, default `nonlinear`. |
+| `TRF_conv_mini_windowtest.py` | Mini-test harness for the "mostly predicts ~0" concern. Single subject, ~100-window subset, sweeps `WINDOW_SECS_TO_TEST x OVERLAP_SECS_TO_TEST` (edit constants and re-run), reports `mse_ratio` (final train MSE / predict-zero baseline MSE) per config. Not LOOCV — a fast go/no-go signal before a full cohort run. |
+| `TRF_conv_overfit_check.py` | Optimization-capacity sanity check, run alongside/before the windowing sweep. Same architecture, ~100 windows, `weight_decay=0`, no early stopping — tests whether the model CAN drive loss below the predict-zero baseline at all, to rule out an optimization/architecture bug as the cause of the collapse (as opposed to genuinely weak signal). |
 | `eeg_functions.py` | EEG loading and preprocessing. |
 | `midi_func.py` | Places IDyOM per-note values onto the 64 Hz time grid. |
 | `constants.py` | Paths, subject list, frequency band edges, SAVE_DIR. |
 | `TRF_conv_DIAGNOSTICS.md` | Active diagnostic plan for the linear-conv vs ridge mismatch. |
+| `EXPERIMENT_LOG.md` | Run registry (which script/variant/subjects produced each pickle subfolder) and open-question list. |
 | `CLAUDE.md` | High-level TRF project context for AI agents. |
