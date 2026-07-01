@@ -37,5 +37,8 @@ def make_surprisal_timeseries(
         sample = int(round(t * sfreq))
         if 0 <= sample < n_times:
             surprisal_ts[sample] += s  # impulse
-
+    # Add inside make_surprisal_timeseries temporarily
+    
+    # print(f"  MIDI onsets: {len(onsets)}, IDyOM vec: {len(surprisal_vec)}, "
+    #     f"diff: {len(onsets) - len(surprisal_vec)}")
     return surprisal_ts
