@@ -1,0 +1,46 @@
+======================================================================
+ Diagnostic D2 — shuffle / null test on Sub2
+======================================================================
+
+  Loading Sub2 data...
+✓ Loaded Non-musician (Subject Sub2)
+  - 30 trials, 64 channels @ 512 Hz
+  Loaded 30 trials.
+
+  ── Condition: acoustic ────────────────────────────────────
+    Ridge selected alpha: 1.00e+01  →  r = 0.0794
+    Conv (normal LOOCV)...
+    Conv (normal):                          r = 0.0759  (ratio vs ridge: 0.96×)
+    Conv (circular-shift null)...
+    Conv (held-out EEG shifted T/2):        r = -0.0032
+    Conv (cross-trial pairing shuffle)...
+    Conv (different trial's EEG held-out):  r = 0.0757
+
+    Summary — acoustic:
+      Ridge r         = 0.0794  (alpha = 1.00e+01)
+      Conv normal r   = 0.0759
+      Conv shift null = -0.0032  ([OK] collapsed as expected)
+      Conv xshuffle   = 0.0757  ([!!] SUSPICIOUS — distribution leak)
+
+    [H2] Ridge alpha=1e+01 is moderate — reg mismatch alone is unlikely to explain 3× gap.
+    [!] Null r > 0 — investigate autocorrelation-driven inflation.
+        Compare ridge null (shuffle ridge held-out EEG) for baseline.
+
+  ── Condition: acoustic_and_surprisal ────────────────────────────────────
+    Ridge selected alpha: 1.00e+01  →  r = 0.0821
+    Conv (normal LOOCV)...
+    Conv (normal):                          r = 0.0771  (ratio vs ridge: 0.94×)
+    Conv (circular-shift null)...
+    Conv (held-out EEG shifted T/2):        r = -0.0011
+    Conv (cross-trial pairing shuffle)...
+    Conv (different trial's EEG held-out):  r = 0.0726
+
+    Summary — acoustic_and_surprisal:
+      Ridge r         = 0.0821  (alpha = 1.00e+01)
+      Conv normal r   = 0.0771
+      Conv shift null = -0.0011  ([OK] collapsed as expected)
+      Conv xshuffle   = 0.0726  ([!!] SUSPICIOUS — distribution leak)
+
+    [H2] Ridge alpha=1e+01 is moderate — reg mismatch alone is unlikely to explain 3× gap.
+    [!] Null r > 0 — investigate autocorrelation-driven inflation.
+        Compare ridge null (shuffle ridge held-out EEG) for baseline.
