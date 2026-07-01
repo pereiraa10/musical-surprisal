@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path 
 
 BASE_DIR = Path(__file__).resolve().parent  # TRF/
@@ -11,10 +12,10 @@ MIDI_DIR = DATA_ROOT / 'diliBach_midi_4dryad'
 EEG_DIR = DATA_ROOT / 'diliBach_4dryad_CND'
 
 # Previously used BASE_DIR / '../IDyOM/codeForPaper-IDyOMpy-/benchmark_results/forBenchmark_IDyOMpy/eLife_trained_on_mixed2.mat'
-PITCH_SURPRISAL_FILE = BASE_DIR / '../IDyOM/codeForPaper-IDyOMpy-/IDyOM/out/eLife/surprises/mixed2/data/mixed2_quantization_24_maxOrder_20_viewpoints_pitch_originalPPM.mat'
-ONSET_SURPRISAL_FILE = BASE_DIR / '../IDyOM/codeForPaper-IDyOMpy-/IDyOM/out/eLife/surprises/mixed2/data/mixed2_quantization_24_maxOrder_20_viewpoints_length_originalPPM.mat'
+PITCH_SURPRISAL_FILE = BASE_DIR / '../IDyOM/codeForPaper-IDyOMpy-/IDyOM/out/eLife/surprises/mixed2/data/mixed2_quantization_24_maxOrder_20_viewpoints_pitch.mat'
+ONSET_SURPRISAL_FILE = BASE_DIR / '../IDyOM/codeForPaper-IDyOMpy-/IDyOM/out/eLife/surprises/mixed2/data/mixed2_quantization_24_maxOrder_20_viewpoints_length.mat'
 
-SAVE_DIR = BASE_DIR / 'pickles/encoding'
+SAVE_DIR = BASE_DIR / f'pickles/encoding_{date.today()}'
 
 # Load the raw EEG file for a single subject and a specified frequency band
 # Adjust subject index and the low/high frequency values accordingly

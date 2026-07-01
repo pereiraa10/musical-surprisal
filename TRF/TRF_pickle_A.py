@@ -43,6 +43,8 @@ onset_entropy_data = {}
 
 os.makedirs(constants.SAVE_DIR, exist_ok=True)
 
+IC_CLIP = 15.0 # bits
+
 for song_id in unique_song_ids:
 
     song_name = f"audio{song_id}"
@@ -52,10 +54,19 @@ for song_id in unique_song_ids:
     if song_name not in idyom_onset_mat:
         raise KeyError(f"{song_name} not found in ONSET_SURPRISAL_FILE")
 
-    pitch_surprisal_data[song_id] = np.asarray(idyom_pitch_mat[song_name])[0]
-    pitch_entropy_data[song_id] = np.asarray(idyom_pitch_mat[song_name])[1]
-    onset_surprisal_data[song_id] = np.asarray(idyom_onset_mat[song_name])[0]
-    onset_entropy_data[song_id] = np.asarray(idyom_onset_mat[song_name])[1]
+    raw_pitch = np.asarray(idyom_pitch_mat[song_name])
+    raw_onset = np.asarray(idyom_onset_mat[song_name])
+
+    # Clip IC values (row 0), leave entropy (row 1) unclipped
+    pitch_surprisal_data[song_id] = np.clip(raw_pitch[0], 0, IC_CLIP)
+    pitch_entropy_data[song_id]   = raw_pitch[1]
+    onset_surprisal_data[song_id] = np.clip(raw_onset[0], 0, IC_CLIP)
+    onset_entropy_data[song_id]   = raw_onset[1]
+    
+    # pitch_surprisal_data[song_id] = np.asarray(idyom_pitch_mat[song_name])[0]
+    # pitch_entropy_data[song_id] = np.asarray(idyom_pitch_mat[song_name])[1]
+    # onset_surprisal_data[song_id] = np.asarray(idyom_onset_mat[song_name])[0]
+    # onset_entropy_data[song_id] = np.asarray(idyom_onset_mat[song_name])[1]
 
 
 all_events = []
@@ -109,55 +120,37 @@ for SUBJECT in constants.SUBJECTS:
         # make the song_IDs
         song_id = stimulus_id % 10
         song_id = song_id if song_id != 0 else 10
+        
+        # Skip if already built for this song_id
+        if song_id in stim_pitch_surprisal_ndvars:
+            continue
+    
         midi_path = constants.MIDI_DIR / f"audio{song_id}.mid"
         
-        # find the number of eeg samples for each song
-        n_times = events['eeg'][stimulus_id - 1].time.nsamples
+        # find the number of envelope samples for each song
+        time = events['envelope'][stimulus_id - 1].time
+        n_times = time.nsamples
 
-        # Pull the surprisal data and entropy data for the current song
-        pitch_surprisal_vec = pitch_surprisal_data[song_id]
-        pitch_entropy_vec = pitch_entropy_data[song_id]
-        onset_surprisal_vec = onset_surprisal_data[song_id]
-        onset_entropy_vec = onset_entropy_data[song_id]        
+        pitch_surprisal_ndvar = eelbrain.NDVar(
+            midi_func.make_surprisal_timeseries(midi_path, pitch_surprisal_data[song_id], 100, n_times),
+            dims=(time,), name="pitch_surprisal")
 
-        # Make the surprisal data and entropy data into a time-based vector
-        pitch_surprisal_ts = midi_func.make_surprisal_timeseries(
-            midi_path=midi_path,
-            surprisal_vec=pitch_surprisal_vec,
-            sfreq=sfreq,
-            n_times=n_times)
+        pitch_entropy_ndvar = eelbrain.NDVar(
+            midi_func.make_surprisal_timeseries(midi_path, pitch_entropy_data[song_id], 100, n_times),
+            dims=(time,), name="pitch_entropy")
 
-        pitch_entropy_ts = midi_func.make_surprisal_timeseries(
-            midi_path=midi_path,
-            surprisal_vec=pitch_entropy_vec,
-            sfreq=sfreq,
-            n_times=n_times)
-        
-        onset_surprisal_ts = midi_func.make_surprisal_timeseries(
-            midi_path=midi_path,
-            surprisal_vec=onset_surprisal_vec,
-            sfreq=sfreq,
-            n_times=n_times)
+        onset_surprisal_ndvar = eelbrain.NDVar(
+            midi_func.make_surprisal_timeseries(midi_path, onset_surprisal_data[song_id], 100, n_times),
+            dims=(time,), name="onset_surprisal")
 
-        onset_entropy_ts = midi_func.make_surprisal_timeseries(
-            midi_path=midi_path,
-            surprisal_vec=onset_entropy_vec,
-            sfreq=sfreq,
-            n_times=n_times)
-        
-        time = events['eeg'][stimulus_id - 1].time  #  reuse EEG time axis directly
-        # Create a feature dimension
-        feature_dim = eelbrain.Scalar('feature', [0, 1])  # 0=surprisal, 1=entropy
+        onset_entropy_ndvar = eelbrain.NDVar(
+            midi_func.make_surprisal_timeseries(midi_path, onset_entropy_data[song_id], 100, n_times),
+            dims=(time,), name="onset_entropy")
 
-        pitch_surprisal_ndvar = eelbrain.NDVar(pitch_surprisal_ts, dims=(time, ), name="pitch surprisal")
-        pitch_entropy_ndvar = eelbrain.NDVar(pitch_entropy_ts, dims=(time, ), name="pitch entropy")
-        onset_surprisal_ndvar = eelbrain.NDVar(onset_surprisal_ts, dims=(time, ), name="onset surprisal")
-        onset_entropy_ndvar = eelbrain.NDVar(onset_entropy_ts, dims=(time, ), name="onset entropy")
-        
-        stim_pitch_surprisal_ndvars[stimulus_id - 1] = pitch_surprisal_ndvar
-        stim_pitch_entropy_ndvars[stimulus_id - 1] = pitch_entropy_ndvar
-        stim_onset_surprisal_ndvars[stimulus_id - 1] = onset_surprisal_ndvar
-        stim_onset_entropy_ndvars[stimulus_id - 1] = onset_entropy_ndvar
+        stim_pitch_surprisal_ndvars[song_id] = pitch_surprisal_ndvar
+        stim_pitch_entropy_ndvars[song_id]   = pitch_entropy_ndvar
+        stim_onset_surprisal_ndvars[song_id] = onset_surprisal_ndvar
+        stim_onset_entropy_ndvars[song_id]   = onset_entropy_ndvar
 
     pitch_surprisal_per_event = []
     pitch_entropy_per_event = []
@@ -165,7 +158,9 @@ for SUBJECT in constants.SUBJECTS:
     onset_entropy_per_event = []
 
     for stimulus_id in events['event']:
-        song_id = stim.stimIdxs[stimulus_id - 1]
+        song_id = stimulus_id % 10
+        song_id = song_id if song_id != 0 else 10  
+        
         pitch_surprisal_per_event.append(stim_pitch_surprisal_ndvars[int(song_id)])
         pitch_entropy_per_event.append(stim_pitch_entropy_ndvars[int(song_id)])
         onset_surprisal_per_event.append(stim_onset_surprisal_ndvars[int(song_id)])
@@ -177,37 +172,37 @@ for SUBJECT in constants.SUBJECTS:
     events['onset_entropy'] = onset_entropy_per_event
     
     # # Flipping the order to match the envelope TODO: figure out why this sucks 
-    events['pitch_surprisal'] = events['pitch_surprisal'][-1:] + events['pitch_surprisal'][:-1]
-    events['pitch_entropy'] = events['pitch_entropy'][-1:] + events['pitch_entropy'][:-1]
-    events['onset_surprisal'] = events['onset_surprisal'][-1:] + events['onset_surprisal'][:-1]
-    events['onset_entropy'] = events['onset_entropy'][-1:] + events['onset_entropy'][:-1]
+    # events['pitch_surprisal'] = events['pitch_surprisal'][-1:] + events['pitch_surprisal'][:-1]
+    # events['pitch_entropy'] = events['pitch_entropy'][-1:] + events['pitch_entropy'][:-1]
+    # events['onset_surprisal'] = events['onset_surprisal'][-1:] + events['onset_surprisal'][:-1]
+    # events['onset_entropy'] = events['onset_entropy'][-1:] + events['onset_entropy'][:-1]
 
     x = [
         'envelope',
         'onsets',
-        'pitch_surprisal',
-        'pitch_entropy',
-        'onset_surprisal',
-        'onset_entropy'
+        # 'pitch_surprisal',
+        # 'pitch_entropy',
+        # 'onset_surprisal',
+        # 'onset_entropy'
     ]
 
     # Estimate the TRF: boosting(y, x, tstart, tstop[, scale_data, ...])
-    trf = eelbrain.boosting('eeg', x, 0, 0.350, data=events, basis=0.050, partitions=4, error='l1')
+    # trf = eelbrain.boosting('eeg', x, 0, 0.350, data=events, basis=0.050, partitions=4, error='l1')
    
     # Estimate the predicted power
     trf_cv = eelbrain.boosting('eeg', x, 0, 0.350, data=events, basis=0.050, partitions=4, test=True, error='l1')
    
     # # Train envelope decoder
-    decoder = eelbrain.boosting('envelope', 'eeg', -0.600, 0.200, data=events, partitions=4, basis=0.05, error='l1')
+    # decoder = eelbrain.boosting('envelope', 'eeg', -0.600, 0.200, data=events, partitions=4, basis=0.05, error='l1')
     
     # # Train onsets decoder
-    decoder_onsets = eelbrain.boosting('onsets', 'eeg', -0.600, 0.200, data=events, partitions=4, basis=0.05, error='l1')
+    # decoder_onsets = eelbrain.boosting('onsets', 'eeg', -0.600, 0.200, data=events, partitions=4, basis=0.05, error='l1')
     
     # Create the data structure for one subject and one band
     # trf and trf_cv are saved for future research; decoder, decoder_onsets, and trials are used in this paper
 
     all_data = {
-        'trf': trf,
+        # 'trf': trf,
         'trf_cv': trf_cv,
         # 'decoder': decoder,
         # 'decoder_onsets': decoder_onsets,
@@ -266,7 +261,7 @@ for SUBJECT in constants.SUBJECTS:
     if not os.path.exists(constants.SAVE_DIR):
         os.makedirs(constants.SAVE_DIR)
     
-    filename = os.path.join(constants.SAVE_DIR, f'{SUBJECT}_{x}_all_data.pkl')
+    filename = os.path.join(constants.SAVE_DIR, f'{SUBJECT}_{x}_acoustic_data.pkl')
             
     eelbrain.save.pickle(all_data, filename)
     
