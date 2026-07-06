@@ -5,8 +5,10 @@ TRF_mne.py (experiments/ version) — MNE ReceptiveField ridge TRF pipeline
 Same algorithm as ../TRF_mne.py: alpha is selected via trial-based LOOCV using
 MNE ReceptiveField's own internal lag-matrix construction (not the explicit
 Toeplitz matrix TRF_sklearn.py builds). Data loading/preprocessing/
-alignment/z-scoring now come from dataset.TRFDataset instead of being duplicated
-inline.
+alignment/z-scoring now come from dataset.PreparedSubject + dataset.TRFDataset
+instead of being duplicated inline. PreparedSubject runs the condition-
+independent pipeline once per subject; both conditions below reuse it via
+.to_dataset(condition, ...).
 
 Alpha values selected here are NOT comparable to TRF_sklearn.py's — the two
 implementations construct/scale their lag matrices differently. See
@@ -23,7 +25,7 @@ from sklearn.linear_model import Ridge
 
 from config import load_config
 import utils
-from dataset import TRFDataset
+from dataset import PreparedSubject
 import results as res
 
 RIDGE_ALPHAS = np.logspace(1, 7, 25)
@@ -111,12 +113,15 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
 
     for SUBJECT in config.subjects:
+        # Load raw EEG + run the condition-independent pipeline once per
+        # subject (PreparedSubject); each condition below only reruns the
+        # cheap per-condition z-scoring step, not the full preprocessing.
         eeg_path = config.paths.eeg_dir / config.eeg_filename_pattern.format(subject=SUBJECT)
         eeg_data = utils.load_subject_raw_eeg(eeg_path, SUBJECT)
+        prepared = PreparedSubject(SUBJECT, eeg_data, config, debug=DEBUG)
 
         for condition, feature_keys in config.conditions.items():
-            ds = TRFDataset(SUBJECT, eeg_data, condition, config,
-                            window_samples=None, debug=DEBUG)
+            ds = prepared.to_dataset(condition, window_samples=None)
             trials = ds.trials
             X_all = [np.column_stack([t[k] for k in feature_keys]) for t in trials]
             Y_all = [t['eeg'] for t in trials]

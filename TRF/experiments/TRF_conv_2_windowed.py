@@ -3,8 +3,10 @@ TRF_conv_2_windowed.py (experiments/ version)
 ────────────────────────────────────────────────────────────────────────────────
 Windowed mini-batch conv TRF. Same model/training code as the original
 ../TRF_conv_2_windowed.py — the only structural change is that data loading,
-preprocessing, alignment, and z-scoring now come from dataset.TRFDataset instead
-of ~150 lines duplicated from TRF_sklearn.py / TRF_mne.py inline.
+preprocessing, alignment, and z-scoring now come from dataset.PreparedSubject +
+dataset.TRFDataset instead of ~150 lines duplicated from TRF_sklearn.py /
+TRF_mne.py inline. PreparedSubject runs the condition-independent pipeline
+once per subject; both conditions below reuse it via .to_dataset(condition, ...).
 
 Two additions beyond the port:
   - `extract_kernel()` pulls the literal TRF kernel out of 'linear'/'separable'
@@ -40,7 +42,7 @@ import matplotlib.pyplot as plt
 
 from config import load_config
 import utils
-from dataset import TRFDataset
+from dataset import PreparedSubject
 import results as res
 
 # Config is loaded at import time so the model-architecture constants below
@@ -494,13 +496,16 @@ def main():
     }
 
     for SUBJECT in config.subjects:
+        # Load raw EEG + run the condition-independent pipeline once per
+        # subject (PreparedSubject); each condition below only reruns the
+        # cheap per-condition z-scoring step, not the full preprocessing.
         eeg_path = config.paths.eeg_dir / config.eeg_filename_pattern.format(subject=SUBJECT)
         eeg_data = utils.load_subject_raw_eeg(eeg_path, SUBJECT)
+        prepared = PreparedSubject(SUBJECT, eeg_data, config, debug=DEBUG)
 
         for condition, feature_keys in config.conditions.items():
-            ds = TRFDataset(SUBJECT, eeg_data, condition, config,
-                            window_samples=WINDOW_SAMPLES, hop_samples=HOP_SAMPLES,
-                            debug=DEBUG)
+            ds = prepared.to_dataset(condition, window_samples=WINDOW_SAMPLES,
+                                     hop_samples=HOP_SAMPLES)
             n_features = len(feature_keys)
 
             print(f"\n  {SUBJECT} | {condition} | variant={MODEL_VARIANT} (windowed) "

@@ -6,9 +6,9 @@ Modernized from ../TRF_pickle_A_and_AM.py: that script predated the per-trial
 LPF -> downsample -> HPF -> strip-padding pipeline (it filtered the
 concatenated signal) and sourced its envelope on the fly from the raw .wav
 files at 100 Hz rather than from dataStim.mat's precomputed envelope at
-64 Hz. This version goes through dataset.TRFDataset like the other three
-experiment scripts, so all four are directly comparable — see the "modernize"
-decision recorded in EVALUATION_NOTES.md.
+64 Hz. This version goes through dataset.PreparedSubject + dataset.TRFDataset
+like the other three experiment scripts, so all four are directly comparable
+— see the "modernize" decision recorded in EVALUATION_NOTES.md.
 
 Two things do NOT carry over unchanged, both intentional:
 
@@ -50,7 +50,7 @@ import eelbrain
 
 from config import load_config
 import utils
-from dataset import TRFDataset
+from dataset import PreparedSubject
 import results as res
 
 DEBUG = True
@@ -100,12 +100,15 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
 
     for SUBJECT in config.subjects:
+        # Load raw EEG + run the condition-independent pipeline once per
+        # subject (PreparedSubject); each condition below only reruns the
+        # cheap per-condition z-scoring step, not the full preprocessing.
         eeg_path = config.paths.eeg_dir / config.eeg_filename_pattern.format(subject=SUBJECT)
         eeg_data = utils.load_subject_raw_eeg(eeg_path, SUBJECT)
+        prepared = PreparedSubject(SUBJECT, eeg_data, config, debug=DEBUG)
 
         for condition, feature_keys in config.conditions.items():
-            ds = TRFDataset(SUBJECT, eeg_data, condition, config,
-                            window_samples=None, debug=DEBUG)
+            ds = prepared.to_dataset(condition, window_samples=None)
             trf_cv = eelbrain.boosting(
                 'eeg', feature_keys, config.tmin, config.tmax, data=ds.events,
                 basis=BASIS, partitions=PARTITIONS, test=True, error=ERROR)

@@ -4,8 +4,10 @@ TRF_sklearn.py (experiments/ version) — explicit Toeplitz ridge TRF pipeline
 
 Same algorithm as ../TRF_sklearn.py: alpha is selected via trial-based LOOCV
 on an explicit Toeplitz lag matrix (built here, not by a library). Data
-loading/preprocessing/alignment/z-scoring now come from dataset.TRFDataset
-instead of being duplicated inline.
+loading/preprocessing/alignment/z-scoring now come from dataset.PreparedSubject
++ dataset.TRFDataset instead of being duplicated inline. PreparedSubject runs
+the condition-independent pipeline once per subject; both conditions below
+reuse it via .to_dataset(condition, ...).
 
 Alpha values selected here are NOT comparable to TRF_mne.py's — the two
 implementations construct/scale their lag matrices differently. See
@@ -20,7 +22,7 @@ from scipy.stats import pearsonr
 
 from config import load_config
 import utils
-from dataset import TRFDataset
+from dataset import PreparedSubject
 import results as res
 
 RIDGE_ALPHAS = np.logspace(1, 7, 25)
@@ -136,14 +138,15 @@ def main():
     n_lags = int(round((config.tmax - config.tmin) * config.sfreq)) + 1
 
     for SUBJECT in config.subjects:
-        # Load raw EEG once per subject; reuse across conditions (two TRFDataset
-        # instances sharing one eeg_data and, via the cache, one stim library).
+        # Load raw EEG + run the condition-independent pipeline once per
+        # subject (PreparedSubject); each condition below only reruns the
+        # cheap per-condition z-scoring step, not the full preprocessing.
         eeg_path = config.paths.eeg_dir / config.eeg_filename_pattern.format(subject=SUBJECT)
         eeg_data = utils.load_subject_raw_eeg(eeg_path, SUBJECT)
+        prepared = PreparedSubject(SUBJECT, eeg_data, config, debug=DEBUG)
 
         for condition, feature_keys in config.conditions.items():
-            ds = TRFDataset(SUBJECT, eeg_data, condition, config,
-                            window_samples=None, debug=DEBUG)
+            ds = prepared.to_dataset(condition, window_samples=None)
             trials = ds.trials
             Phi_all = [
                 build_design_matrix({k: t[k] for k in feature_keys},
