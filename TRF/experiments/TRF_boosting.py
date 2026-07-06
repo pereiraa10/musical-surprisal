@@ -1,5 +1,5 @@
 """
-TRF_pickle_A_and_AM.py (experiments/ version) — eelbrain boosting TRF pipeline
+TRF_boosting.py (experiments/ version) — eelbrain boosting TRF pipeline
 =================================================================================
 
 Modernized from ../TRF_pickle_A_and_AM.py: that script predated the per-trial

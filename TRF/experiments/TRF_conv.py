@@ -1,5 +1,5 @@
 """
-TRF_conv_2_windowed.py (experiments/ version)
+TRF_conv.py (experiments/ version)
 ────────────────────────────────────────────────────────────────────────────────
 Windowed mini-batch conv TRF. Same model/training code as the original
 ../TRF_conv_2_windowed.py — the only structural change is that data loading,
