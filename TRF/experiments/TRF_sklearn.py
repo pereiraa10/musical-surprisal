@@ -4,7 +4,7 @@ TRF_sklearn.py (experiments/ version) — explicit Toeplitz ridge TRF pipeline
 
 Same algorithm as ../TRF_sklearn.py: alpha is selected via trial-based LOOCV
 on an explicit Toeplitz lag matrix (built here, not by a library). Data
-loading/preprocessing/alignment/z-scoring now come from dataset.Dataset
+loading/preprocessing/alignment/z-scoring now come from dataset.TRFDataset
 instead of being duplicated inline.
 
 Alpha values selected here are NOT comparable to TRF_mne.py's — the two
@@ -13,11 +13,14 @@ EVALUATION_NOTES.md.
 """
 
 import os
+import sys
 
 import numpy as np
 from scipy.stats import pearsonr
 
-from dataset import Dataset, CONDITIONS, TMIN, TMAX, SFREQ, SUBJECTS, SAVE_DIR
+from config import load_config
+import utils
+from dataset import TRFDataset
 import results as res
 
 RIDGE_ALPHAS = np.logspace(1, 7, 25)
@@ -127,16 +130,24 @@ def average_weights(coefs, n_features, n_lags):
 
 
 def main():
-    os.makedirs(SAVE_DIR, exist_ok=True)
-    n_lags = int(round((TMAX - TMIN) * SFREQ)) + 1
+    config = load_config(cli_args=sys.argv[1:])
+    save_dir = config.paths.save_dir
+    os.makedirs(save_dir, exist_ok=True)
+    n_lags = int(round((config.tmax - config.tmin) * config.sfreq)) + 1
 
-    for SUBJECT in SUBJECTS:
-        ds = Dataset(SUBJECT, debug=DEBUG)
+    for SUBJECT in config.subjects:
+        # Load raw EEG once per subject; reuse across conditions (two TRFDataset
+        # instances sharing one eeg_data and, via the cache, one stim library).
+        eeg_path = config.paths.eeg_dir / config.eeg_filename_pattern.format(subject=SUBJECT)
+        eeg_data = utils.load_subject_raw_eeg(eeg_path, SUBJECT)
 
-        for condition, feature_keys in CONDITIONS.items():
-            trials = ds.get_trials(condition)
+        for condition, feature_keys in config.conditions.items():
+            ds = TRFDataset(SUBJECT, eeg_data, condition, config,
+                            window_samples=None, debug=DEBUG)
+            trials = ds.trials
             Phi_all = [
-                build_design_matrix({k: t[k] for k in feature_keys}, TMIN, TMAX, SFREQ)
+                build_design_matrix({k: t[k] for k in feature_keys},
+                                    config.tmin, config.tmax, config.sfreq)
                 for t in trials
             ]
             Y_all = [t['eeg'] for t in trials]
@@ -155,7 +166,7 @@ def main():
                 trial_boundaries=trial_boundaries, best_alpha=float(best_alpha),
                 alpha_selection=alpha_r, weights=weights,
             )
-            path = res.result_filename(SAVE_DIR, SUBJECT, 'sklearn_ridge', condition)
+            path = res.result_filename(save_dir, SUBJECT, 'sklearn_ridge', condition)
             res.save_result(path, result)
 
             print(f"  {SUBJECT} | {condition}: sklearn Ridge mean r = "

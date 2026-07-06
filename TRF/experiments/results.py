@@ -7,7 +7,7 @@ EVALUATION_NOTES.md for that — LOOCV harnesses, alpha selection, and
 lag-matrix construction stay in each script since they differ per model
 family). It only standardizes what gets written to disk once a script has
 already produced its own Y_pred/Y_true/weights, so every pickle in
-dataset.SAVE_DIR has the same shape regardless of which script produced it.
+the run's save_dir has the same shape regardless of which script produced it.
 That's what makes cross-model notebook analysis (avg_trf.ipynb,
 correlation_plot.ipynb) possible without per-script loading code.
 
@@ -113,6 +113,17 @@ def build_result(*, subject, subject_type, condition, feature_keys, model_family
         raise ValueError(
             "build_result needs either (Y_true and Y_pred) or an explicit "
             "r_per_channel override.")
+
+    # Cross-check channel labeling against the prediction array width, so a
+    # mismatched channel list can't silently mislabel per-channel results.
+    # Skipped when Y_true is None (the boosting-without-reconstruction case).
+    if Y_true is not None and channel_names is not None:
+        if len(channel_names) != Y_true.shape[1]:
+            raise ValueError(
+                f"channel_names length ({len(channel_names)}) != Y_true channel "
+                f"count ({Y_true.shape[1]}) for {subject} / {condition} / "
+                f"{model_family}."
+            )
 
     meta = {
         'subject': subject,

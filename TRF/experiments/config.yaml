@@ -1,0 +1,125 @@
+# config.yaml — all dataset/preprocessing/TRF constants for the experiments/ scripts.
+#
+# Relative paths here are resolved against the parent of experiments/ (the TRF/
+# directory) inside config.py — do NOT put absolute paths here. See config.py's
+# _resolve_paths(). CLI flags (see config.py's argparse) override any value below.
+
+paths:
+  data_root: "liberi_dataset/doi_10_5061_dryad_g1jwstqmh__v20211008"
+  wav_subdir: "diliBach_wav_4dryad"
+  midi_subdir: "diliBach_midi_4dryad"
+  eeg_subdir: "diliBach_4dryad_CND"
+  pitch_surprisal_file: "../IDyOM/codeForPaper-IDyOMpy-/IDyOM/out/eLife/surprises/mixed2/data/mixed2_quantization_24_maxOrder_20_viewpoints_pitch.mat"
+  onset_surprisal_file: "../IDyOM/codeForPaper-IDyOMpy-/IDyOM/out/eLife/surprises/mixed2/data/mixed2_quantization_24_maxOrder_20_viewpoints_length.mat"
+  save_dir_template: "pickles/encoding_{date}"
+
+# Per-subject EEG filename, relative to the resolved eeg_dir. `{subject}` is
+# substituted with the subject id (e.g. 'Sub2').
+eeg_filename_pattern: "data{subject}.mat"
+
+subjects:
+  - Sub1
+  - Sub2
+  - Sub3
+  - Sub4
+  - Sub5
+  - Sub6
+  - Sub7
+  - Sub8
+  - Sub9
+  - Sub10
+  - Sub11
+  - Sub12
+  - Sub13
+  - Sub14
+  - Sub15
+  - Sub16
+  - Sub17
+  - Sub18
+  - Sub19
+  - Sub20
+
+# Explicit musician / non-musician labels, one per subject. Replaces the old
+# implicit `subject_idx >= 11` formula (Sub1-Sub10 non-musicians, Sub11-Sub20
+# musicians). Preserve exact values when adapting to a new dataset.
+subject_type:
+  Sub1: Non-musician
+  Sub2: Non-musician
+  Sub3: Non-musician
+  Sub4: Non-musician
+  Sub5: Non-musician
+  Sub6: Non-musician
+  Sub7: Non-musician
+  Sub8: Non-musician
+  Sub9: Non-musician
+  Sub10: Non-musician
+  Sub11: Musician
+  Sub12: Musician
+  Sub13: Musician
+  Sub14: Musician
+  Sub15: Musician
+  Sub16: Musician
+  Sub17: Musician
+  Sub18: Musician
+  Sub19: Musician
+  Sub20: Musician
+
+# Which song each trial played, keyed by the trial's event-marker id (the
+# stim-channel marker `i+1` for trial index i; markers run 1..n_trials). Maps to
+# the song id used for audio{song_id}.wav/.mid and the IDyOM surprisal lookups.
+# Derived from the old `int(stimulus_id % 10) or 10` formula and verified to
+# match dataStim.mat's stim.stimIdxs exactly (songs 1..10 x 3 blocks).
+trial_to_song_id:
+  1: 1
+  2: 2
+  3: 3
+  4: 4
+  5: 5
+  6: 6
+  7: 7
+  8: 8
+  9: 9
+  10: 10
+  11: 1
+  12: 2
+  13: 3
+  14: 4
+  15: 5
+  16: 6
+  17: 7
+  18: 8
+  19: 9
+  20: 10
+  21: 1
+  22: 2
+  23: 3
+  24: 4
+  25: 5
+  26: 6
+  27: 7
+  28: 8
+  29: 9
+  30: 10
+
+preprocessing:
+  low_frequency: 1     # Hz, HPF cutoff
+  high_frequency: 8    # Hz, LPF cutoff
+  sfreq: 64            # Hz, target sampling rate after preprocessing/resampling
+
+trf:
+  tmin: -0.1           # seconds, receptive-field start (pre-stimulus)
+  tmax: 0.600          # seconds, receptive-field end   (post-stimulus)
+  ic_clip: 15.0        # bits, IDyOM surprisal clip ceiling
+
+feature_keys:
+  acoustic: ["envelope", "onsets"]
+  surprisal: ["pitch_surprisal", "pitch_entropy", "onset_surprisal", "onset_entropy"]
+
+# Default windowing for TRFDataset's sample/window-level __getitem__.
+# window_samples: null  -> one window per trial, spanning the whole trial
+#                          (variable length; today's default behavior).
+# window_samples: <int> -> fixed-length windowing (1 is valid = single sample).
+# hop_samples:    null  -> defaults to window_samples (non-overlapping).
+windowing:
+  window_samples: null
+  hop_samples: null

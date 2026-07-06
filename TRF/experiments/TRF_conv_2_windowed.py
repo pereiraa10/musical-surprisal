@@ -3,7 +3,7 @@ TRF_conv_2_windowed.py (experiments/ version)
 ────────────────────────────────────────────────────────────────────────────────
 Windowed mini-batch conv TRF. Same model/training code as the original
 ../TRF_conv_2_windowed.py — the only structural change is that data loading,
-preprocessing, alignment, and z-scoring now come from dataset.Dataset instead
+preprocessing, alignment, and z-scoring now come from dataset.TRFDataset instead
 of ~150 lines duplicated from TRF_sklearn.py / TRF_mne.py inline.
 
 Two additions beyond the port:
@@ -24,6 +24,7 @@ NOTE: requires PyTorch (pip install torch). No GPU required; runs on CPU.
 """
 
 import os
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -31,14 +32,25 @@ from scipy.stats import pearsonr
 
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset as TorchDataset, DataLoader
+from torch.utils.data import DataLoader, Subset
 
 import matplotlib
 matplotlib.use('Agg')   # non-interactive backend; safe on headless machines
 import matplotlib.pyplot as plt
 
-from dataset import Dataset, CONDITIONS, TMIN, TMAX, SFREQ, SUBJECTS, SAVE_DIR
+from config import load_config
+import utils
+from dataset import TRFDataset
 import results as res
+
+# Config is loaded at import time so the model-architecture constants below
+# (N_LAGS / LAG_MIN / LAG_MAX, WINDOW_SAMPLES) can derive from it, exactly as
+# they derived from the module-level SFREQ/TMIN/TMAX before. CLI overrides
+# (e.g. --sfreq, --tmin) are honored via sys.argv.
+config = load_config(cli_args=sys.argv[1:])
+SFREQ = config.sfreq
+TMIN = config.tmin
+TMAX = config.tmax
 
 
 # ── Deep-learning knobs ──
@@ -86,57 +98,6 @@ print(f"Using device: {DEVICE}")
 
 torch.manual_seed(SEED)
 np.random.seed(SEED)
-
-
-# ════════════════════════════════════════════════════════════════════════════════
-# Windowing utilities
-# ════════════════════════════════════════════════════════════════════════════════
-
-def _make_windows(X, Y, window_samples=WINDOW_SAMPLES, hop_samples=HOP_SAMPLES):
-    """Slice one trial into overlapping fixed-length windows.
-
-    X : (T, n_features)  numpy array (z-scored, from Dataset.get_trials)
-    Y : (T, n_channels)  numpy array
-
-    Returns
-    -------
-    X_wins : (n_windows, n_features, window_samples)  — channel-first for Conv1d
-    Y_wins : (n_windows, n_channels, window_samples)
-    """
-    T = X.shape[0]
-    starts = list(range(0, T - window_samples + 1, hop_samples))
-    if len(starts) == 0:
-        raise ValueError(
-            f"Trial length {T} < WINDOW_SAMPLES {window_samples}; "
-            "cannot extract any windows. Shorten WINDOW_SEC or check the data.")
-    X_wins = np.stack([X[s:s + window_samples].T for s in starts], axis=0)
-    Y_wins = np.stack([Y[s:s + window_samples].T for s in starts], axis=0)
-    return X_wins, Y_wins
-
-
-def _count_windows(trial_list, window_samples=WINDOW_SAMPLES, hop_samples=HOP_SAMPLES):
-    return sum(
-        max(0, (x.shape[0] - window_samples) // hop_samples + 1)
-        for x in trial_list
-    )
-
-
-class WindowDataset(TorchDataset):
-    """Wraps precomputed sliding-window excerpts, channel-first for Conv1d:
-        X : (n_windows, n_features, WINDOW_SAMPLES)
-        Y : (n_windows, n_channels, WINDOW_SAMPLES)
-    """
-
-    def __init__(self, X_wins: np.ndarray, Y_wins: np.ndarray):
-        self.X = torch.from_numpy(X_wins.astype(np.float32))
-        self.Y = torch.from_numpy(Y_wins.astype(np.float32))
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        return self.X[idx], self.Y[idx]
-
 
 # ════════════════════════════════════════════════════════════════════════════════
 # Model
@@ -259,11 +220,16 @@ def _pearsonr_channels(pred, target):
     return float(np.nanmean(rs))
 
 
-def train_one_fold(X_tr, Y_tr, n_features, n_channels):
-    """Train on a list of training trials using windowed mini-batch updates.
+def train_one_fold(ds, train_trial_ids, n_features, n_channels):
+    """Train on the windows of `train_trial_ids` using mini-batch updates.
 
-    X_tr, Y_tr : lists of (T_i, n_features) / (T_i, n_channels) numpy arrays,
-    each z-scored per-trial (from Dataset.get_trials).
+    ds : windowed TRFDataset — the DataLoader-ready window source.
+    train_trial_ids : ordered list of trial indices used for training (the
+        held-out LOOCV trial already excluded). The LAST id is the inner
+        validation trial (matching the old 'last training trial' split): its
+        windows drive val-MSE monitoring and its FULL trial drives the
+        Pearson-r early-stopping metric; the remaining ids supply the training
+        windows.
 
     Returns: model, train_mse_history, val_mse_history, val_r_history
     """
@@ -271,29 +237,26 @@ def train_one_fold(X_tr, Y_tr, n_features, n_channels):
     opt = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     loss_fn = nn.MSELoss()
 
-    # Inner validation split: last training trial held out.
-    inner_val_idx = len(X_tr) - 1
-    tr_idx = list(range(inner_val_idx))
+    # Inner validation split: last training trial held out (unchanged).
+    inner_val_trial = train_trial_ids[-1]
+    pure_train_trials = train_trial_ids[:-1]
 
-    Xv_full = _to_tensor(X_tr[inner_val_idx])
-    Yv_full = _to_tensor(Y_tr[inner_val_idx])
+    # Full inner-val trial tensors — Pearson-r early-stopping metric.
+    val_trial = ds.trials[inner_val_trial]
+    Xv_full = _to_tensor(np.column_stack([val_trial[k] for k in ds.feature_keys]))
+    Yv_full = _to_tensor(val_trial['eeg'])
 
-    all_X_wins, all_Y_wins = [], []
-    for i in tr_idx:
-        xw, yw = _make_windows(X_tr[i], Y_tr[i])
-        all_X_wins.append(xw)
-        all_Y_wins.append(yw)
-    X_train_wins = np.concatenate(all_X_wins, axis=0)
-    Y_train_wins = np.concatenate(all_Y_wins, axis=0)
+    # Training windows = every window whose source trial is a pure-train trial;
+    # val windows (MSE monitoring only) = windows of the inner-val trial. 
+    train_window_idx = [w for ti in pure_train_trials for w in ds.windows_for_trial(ti)]
+    val_window_idx = ds.windows_for_trial(inner_val_trial)
 
     train_loader = DataLoader(
-        WindowDataset(X_train_wins, Y_train_wins),
+        Subset(ds, train_window_idx),
         batch_size=BATCH_SIZE, shuffle=True, drop_last=False,
     )
-
-    Xv_wins, Yv_wins = _make_windows(X_tr[inner_val_idx], Y_tr[inner_val_idx])
     val_loader = DataLoader(
-        WindowDataset(Xv_wins, Yv_wins),
+        Subset(ds, val_window_idx),
         batch_size=BATCH_SIZE, shuffle=False, drop_last=False,
     )
 
@@ -344,51 +307,49 @@ def train_one_fold(X_tr, Y_tr, n_features, n_channels):
     return model, train_mse_history, val_mse_history, val_r_history
 
 
-def loocv_conv(X_all, Y_all, n_features, n_channels):
-    """Leave-one-trial-out CV.
+def loocv_conv(ds, n_features, n_channels):
+    """Leave-one-trial-out CV over the windowed TRFDataset `ds`.
 
     Returns (Y_pred_concat, Y_true_concat, trial_boundaries, kernels, lc_stats).
     kernels is a list of per-fold extracted TRF kernels (None entries for
     'nonlinear', since it has no single linear kernel).
     """
+    n_trials = ds.n_trials
     Y_pred_all, Y_true_all, trial_boundaries = [], [], []
     fold_train_mse, fold_val_mse, fold_val_r = [], [], []
     kernels = []
     offset = 0
 
-    for i in range(len(X_all)):
-        X_tr = [X_all[j] for j in range(len(X_all)) if j != i]
-        Y_tr = [Y_all[j] for j in range(len(Y_all)) if j != i]
-
-        # Leakage guard: the held-out trial must not be the same object as
-        # any training trial (would indicate aliasing in the split above).
-        X_test_ref = X_all[i]
-        for j, x in enumerate(X_tr):
-            assert x is not X_test_ref, (
-                f"Fold {i}: training trial {j} is the same object as the test trial "
-                "— potential data leakage detected.")
+    for i in range(n_trials):
+        # Training trials in the old X_tr order: every trial except held-out i.
+        train_trial_ids = [j for j in range(n_trials) if j != i]
+        # Leakage guard: the held-out trial is not in the training set.
+        assert i not in train_trial_ids, f"Fold {i}: held-out trial leaked into training."
 
         if DEBUG:
-            n_pure_tr = len(X_tr) - 1
-            n_tr_wins = _count_windows([X_tr[k] for k in range(n_pure_tr)])
-            n_val_wins = _count_windows([X_tr[-1]])
-            heldout_n = X_all[i].shape[0]
+            n_pure_tr = len(train_trial_ids) - 1
+            n_tr_wins = sum(len(ds.windows_for_trial(k)) for k in train_trial_ids[:-1])
+            n_val_wins = len(ds.windows_for_trial(train_trial_ids[-1]))
+            heldout_n = ds.trial_lengths[i]
             print(f"  fold {i}:  train_trials={n_pure_tr}  "
                   f"train_windows={n_tr_wins}  "
                   f"val_windows={n_val_wins}  "
                   f"heldout_samples={heldout_n}")
 
-        model, tr_mse, v_mse, v_r = train_one_fold(X_tr, Y_tr, n_features, n_channels)
+        model, tr_mse, v_mse, v_r = train_one_fold(ds, train_trial_ids, n_features, n_channels)
         fold_train_mse.append(tr_mse)
         fold_val_mse.append(v_mse)
         fold_val_r.append(v_r)
         kernels.append(extract_kernel(model, MODEL_VARIANT))
 
+        # Held-out eval on the full trial i (same full-trial inference as before).
+        held = ds.trials[i]
+        X_test = np.column_stack([held[k] for k in ds.feature_keys])
         model.eval()
         with torch.no_grad():
-            pred = model(_to_tensor(X_all[i])).cpu().numpy()[0].T   # (T, n_ch)
+            pred = model(_to_tensor(X_test)).cpu().numpy()[0].T   # (T, n_ch)
         Y_pred_all.append(pred)
-        Y_true_all.append(Y_all[i])
+        Y_true_all.append(held['eeg'])
         trial_boundaries.append((offset, offset + len(pred)))
         offset += len(pred)
 
@@ -520,7 +481,8 @@ def average_kernel(kernels):
 # ════════════════════════════════════════════════════════════════════════════════
 
 def main():
-    os.makedirs(SAVE_DIR, exist_ok=True)
+    save_dir = config.paths.save_dir
+    os.makedirs(save_dir, exist_ok=True)
 
     hyperparams = {
         'MODEL_VARIANT': MODEL_VARIANT, 'HIDDEN': HIDDEN, 'N_BLOCKS': N_BLOCKS,
@@ -531,13 +493,14 @@ def main():
         'SEED': SEED, 'DEVICE': str(DEVICE),
     }
 
-    for SUBJECT in SUBJECTS:
-        ds = Dataset(SUBJECT, debug=DEBUG)
+    for SUBJECT in config.subjects:
+        eeg_path = config.paths.eeg_dir / config.eeg_filename_pattern.format(subject=SUBJECT)
+        eeg_data = utils.load_subject_raw_eeg(eeg_path, SUBJECT)
 
-        for condition, feature_keys in CONDITIONS.items():
-            trials = ds.get_trials(condition)
-            X_all = [np.column_stack([t[k] for k in feature_keys]) for t in trials]
-            Y_all = [t['eeg'] for t in trials]
+        for condition, feature_keys in config.conditions.items():
+            ds = TRFDataset(SUBJECT, eeg_data, condition, config,
+                            window_samples=WINDOW_SAMPLES, hop_samples=HOP_SAMPLES,
+                            debug=DEBUG)
             n_features = len(feature_keys)
 
             print(f"\n  {SUBJECT} | {condition} | variant={MODEL_VARIANT} (windowed) "
@@ -545,7 +508,7 @@ def main():
                   f"| window={WINDOW_SAMPLES}smp hop={HOP_SAMPLES}smp batch={BATCH_SIZE}")
 
             Y_pred, Y_true, trial_boundaries, kernels, lc_stats = loocv_conv(
-                X_all, Y_all, n_features, ds.n_channels)
+                ds, n_features, ds.n_channels)
 
             weights = average_kernel(kernels)
             training_history = {
@@ -564,11 +527,11 @@ def main():
                 extra_meta={'hyperparams': hyperparams},
             )
             path = res.result_filename(
-                SAVE_DIR, SUBJECT, 'conv', condition, variant=MODEL_VARIANT)
+                save_dir, SUBJECT, 'conv', condition, variant=MODEL_VARIANT)
             res.save_result(path, result)
 
-            plot_learning_curves(lc_stats, SUBJECT, condition, MODEL_VARIANT, SAVE_DIR)
-            plot_alignment(Y_true, Y_pred, SUBJECT, condition, MODEL_VARIANT, SAVE_DIR)
+            plot_learning_curves(lc_stats, SUBJECT, condition, MODEL_VARIANT, save_dir)
+            plot_alignment(Y_true, Y_pred, SUBJECT, condition, MODEL_VARIANT, save_dir)
 
             print(f"  {SUBJECT} | {condition}: conv2_windowed ({MODEL_VARIANT}) "
                   f"mean r = {result['r_per_channel'].mean():.4f}")
