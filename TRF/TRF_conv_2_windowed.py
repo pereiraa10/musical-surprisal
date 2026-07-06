@@ -51,6 +51,7 @@ Run from musical-surprisal/TRF/:
 NOTE: requires PyTorch (pip install torch).  No GPU required; runs on CPU.
 """
 
+import csv
 import os
 import warnings
 from math import gcd
@@ -100,8 +101,8 @@ EARLY_STOP_PATIENCE = 25      # epochs without validation-r improvement before s
 # Replace full-trial training with overlapping-window mini-batches.
 # Windows are extracted independently from each trial; no window crosses trial
 # boundaries, so the LOOCV held-out guarantee is preserved.
-WINDOW_SEC     = 5.0          # window length in seconds
-HOP_SEC        = 0.1          # hop (stride) in seconds
+WINDOW_SEC     = 7.0          # window length in seconds
+HOP_SEC        = 6.0          # hop (stride) in seconds
 BATCH_SIZE     = 64           # windows per gradient step
 
 WINDOW_SAMPLES = int(WINDOW_SEC * SFREQ)   # 128 samples
@@ -611,6 +612,38 @@ for song_id in unique_song_ids:
     onset_entropy_data[song_id]   = raw_onset[1]
 
 os.makedirs(constants.SAVE_DIR, exist_ok=True)
+
+_config = {
+    'TMIN':                 TMIN,
+    'TMAX':                 TMAX,
+    'SFREQ':                SFREQ,
+    'IC_CLIP':              IC_CLIP,
+    'N_LAGS':               N_LAGS,
+    'LAG_MIN':              LAG_MIN,
+    'LAG_MAX':              LAG_MAX,
+    'MODEL_VARIANT':        MODEL_VARIANT,
+    'HIDDEN':               HIDDEN,
+    'N_BLOCKS':             N_BLOCKS,
+    'EPOCHS':               EPOCHS,
+    'LR':                   LR,
+    'WEIGHT_DECAY':         WEIGHT_DECAY,
+    'EARLY_STOP_PATIENCE':  EARLY_STOP_PATIENCE,
+    'WINDOW_SEC':           WINDOW_SEC,
+    'HOP_SEC':              HOP_SEC,
+    'BATCH_SIZE':           BATCH_SIZE,
+    'WINDOW_SAMPLES':       WINDOW_SAMPLES,
+    'HOP_SAMPLES':          HOP_SAMPLES,
+    'CHANNEL_IDX':          CHANNEL_IDX,
+    'DEBUG':                DEBUG,
+    'SEED':                 SEED,
+    'DEVICE':               str(DEVICE),
+}
+_config_path = constants.SAVE_DIR / 'config.csv'
+with open(_config_path, 'w', newline='') as _f:
+    _w = csv.writer(_f)
+    _w.writerow(['parameter', 'value'])
+    _w.writerows(_config.items())
+print(f"Config saved → {_config_path}")
 
 stim_pitch_surprisal_ndvars = {}
 stim_pitch_entropy_ndvars   = {}

@@ -1,0 +1,88 @@
+Using device: mps
+✓ Loaded Non-musician (Subject Sub2)
+  - 30 trials, 64 channels @ 512 Hz
+  [pre] Trial 1: raw = 82395 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 1: post-preproc = 10236 samples @ 64 Hz
+  [pre] Trial 2: raw = 79891 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 2: post-preproc = 9923 samples @ 64 Hz
+  [pre] Trial 3: raw = 62544 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 3: post-preproc = 7754 samples @ 64 Hz
+  [pre] Trial 4: raw = 70553 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 4: post-preproc = 8756 samples @ 64 Hz
+  [pre] Trial 5: raw = 85879 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 5: post-preproc = 10671 samples @ 64 Hz
+  [pre] Trial 6: raw = 103070 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 6: post-preproc = 12820 samples @ 64 Hz
+  [pre] Trial 7: raw = 89690 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 7: post-preproc = 11148 samples @ 64 Hz
+  [pre] Trial 8: raw = 94316 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 8: post-preproc = 11726 samples @ 64 Hz
+  [pre] Trial 9: raw = 69721 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 9: post-preproc = 8652 samples @ 64 Hz
+  [pre] Trial 10: raw = 92212 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 10: post-preproc = 11463 samples @ 64 Hz
+  [pre] Trial 11: raw = 82395 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 11: post-preproc = 10236 samples @ 64 Hz
+  [pre] Trial 12: raw = 79891 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 12: post-preproc = 9923 samples @ 64 Hz
+  [pre] Trial 13: raw = 62544 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 13: post-preproc = 7754 samples @ 64 Hz
+  [pre] Trial 14: raw = 70553 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 14: post-preproc = 8756 samples @ 64 Hz
+  [pre] Trial 15: raw = 85879 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 15: post-preproc = 10671 samples @ 64 Hz
+  [pre] Trial 16: raw = 103070 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 16: post-preproc = 12820 samples @ 64 Hz
+  [pre] Trial 17: raw = 89690 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 17: post-preproc = 11148 samples @ 64 Hz
+  [pre] Trial 18: raw = 94316 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 18: post-preproc = 11726 samples @ 64 Hz
+  [pre] Trial 19: raw = 69721 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 19: post-preproc = 8652 samples @ 64 Hz
+  [pre] Trial 20: raw = 92212 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 20: post-preproc = 11463 samples @ 64 Hz
+  [pre] Trial 21: raw = 82395 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 21: post-preproc = 10236 samples @ 64 Hz
+  [pre] Trial 22: raw = 79891 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 22: post-preproc = 9923 samples @ 64 Hz
+  [pre] Trial 23: raw = 62544 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 23: post-preproc = 7754 samples @ 64 Hz
+  [pre] Trial 24: raw = 70553 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 24: post-preproc = 8756 samples @ 64 Hz
+  [pre] Trial 25: raw = 85879 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 25: post-preproc = 10671 samples @ 64 Hz
+  [pre] Trial 26: raw = 103070 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 26: post-preproc = 12820 samples @ 64 Hz
+  [pre] Trial 27: raw = 89690 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 27: post-preproc = 11148 samples @ 64 Hz
+  [pre] Trial 28: raw = 94316 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 28: post-preproc = 11726 samples @ 64 Hz
+  [pre] Trial 29: raw = 69721 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 29: post-preproc = 8652 samples @ 64 Hz
+  [pre] Trial 30: raw = 92212 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 30: post-preproc = 11463 samples @ 64 Hz
+
+Sub2 | acoustic | variant=nonlinear | 30 trials | features=2 channels=64
+
+  window= 5.0s overlap=0.3s hop=4.70s  n_avail= 1002 n_used= 600  train_mse=0.4758  val_mse=0.5641  gap=0.0883  best_val@250=0.5402  uptick=0.0239  [STABLE]
+  window= 5.0s overlap=0.5s hop=4.50s  n_avail= 1053 n_used= 600  train_mse=0.4715  val_mse=0.6422  gap=0.1707  best_val@230=0.6294  uptick=0.0128  [STABLE]
+  window= 5.0s overlap=0.7s hop=4.30s  n_avail= 1101 n_used= 600  train_mse=0.5159  val_mse=0.5520  gap=0.0361  best_val@104=0.5379  uptick=0.0141  [STABLE]
+  window= 5.0s overlap=1.0s hop=4.00s  n_avail= 1182 n_used= 600  train_mse=0.5042  val_mse=0.4860  gap=-0.0182  best_val@291=0.4793  uptick=0.0067  [STABLE]
+  window= 6.0s overlap=0.3s hop=5.70s  n_avail=  825 n_used= 600  train_mse=0.5383  val_mse=0.4763  gap=-0.0619  best_val@253=0.4715  uptick=0.0048  [STABLE]
+  window= 6.0s overlap=0.5s hop=5.50s  n_avail=  858 n_used= 600  train_mse=0.4953  val_mse=0.5668  gap=0.0716  best_val@277=0.5569  uptick=0.0100  [STABLE]
+  window= 6.0s overlap=0.7s hop=5.30s  n_avail=  888 n_used= 600  train_mse=0.5099  val_mse=0.5244  gap=0.0145  best_val@272=0.5242  uptick=0.0002  [STABLE]
+  window= 6.0s overlap=1.0s hop=5.00s  n_avail=  936 n_used= 600  train_mse=0.5167  val_mse=0.5434  gap=0.0267  best_val@236=0.5202  uptick=0.0232  [STABLE]
+  window= 7.0s overlap=0.3s hop=6.70s  n_avail=  696 n_used= 600  train_mse=0.5413  val_mse=0.5089  gap=-0.0325  best_val@268=0.5060  uptick=0.0028  [STABLE]
+  window= 7.0s overlap=0.5s hop=6.50s  n_avail=  720 n_used= 600  train_mse=0.4999  val_mse=0.4589  gap=-0.0410  best_val@294=0.4541  uptick=0.0048  [STABLE]
+  window= 7.0s overlap=0.7s hop=6.30s  n_avail=  747 n_used= 600  train_mse=0.4942  val_mse=0.4891  gap=-0.0051  best_val@267=0.4764  uptick=0.0127  [STABLE]
+  window= 7.0s overlap=1.0s hop=6.00s  n_avail=  783 n_used= 600  train_mse=0.4922  val_mse=0.5409  gap=0.0487  best_val@286=0.5333  uptick=0.0076  [STABLE]
+  window= 8.0s overlap=0.3s hop=7.70s  n_avail=  606 n_used= 600  train_mse=0.4727  val_mse=0.5416  gap=0.0689  best_val@270=0.5388  uptick=0.0028  [STABLE]
+  window= 8.0s overlap=0.5s hop=7.50s  n_avail=  627 n_used= 600  train_mse=0.4972  val_mse=0.5626  gap=0.0654  best_val@296=0.5520  uptick=0.0106  [STABLE]
+  window= 8.0s overlap=0.7s hop=7.30s  n_avail=  642 n_used= 600  train_mse=0.5006  val_mse=0.4691  gap=-0.0314  best_val@289=0.4549  uptick=0.0143  [STABLE]
+  window= 8.0s overlap=1.0s hop=7.00s  n_avail=  669 n_used= 600  train_mse=0.5118  val_mse=0.4963  gap=-0.0155  best_val@299=0.4963  uptick=0.0000  [STABLE]
+Saved summary CSV -> /Users/arianapereira/Documents/Masters/Projects/SigMA/musical-surprisal/TRF/pickles/encoding_2026-07-02/mini_windowtest_traincurves_summary_Sub2_acoustic.csv
+Saved train/val curves -> /Users/arianapereira/Documents/Masters/Projects/SigMA/musical-surprisal/TRF/pickles/encoding_2026-07-02/mini_windowtest_traincurves_Sub2_acoustic.png
+Saved gap-trajectory figure -> /Users/arianapereira/Documents/Masters/Projects/SigMA/musical-surprisal/TRF/pickles/encoding_2026-07-02/mini_windowtest_gap_Sub2_acoustic.png
+
+Best mse_ratio: window=5.0s overlap=0.3s -> ratio=0.502 (verdict=STABLE, gap=0.0883)
+Best STABLE config (train/val tracked without overfitting): window=5.0s overlap=0.3s -> ratio=0.502

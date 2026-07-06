@@ -184,6 +184,36 @@ regularization and early stopping disabled), and `TRF_conv_mini_windowtest.py`
 sweeps window length x overlap on a ~100-window subset of one subject to
 shortlist a windowing scheme before committing to a full LOOCV cohort run.
 
+**Overfit-check result (2026-07-01):** run on Sub2 (acoustic_and_surprisal)
+across `N_WINDOWS_SUBSET`=50/100/200 and `LR`=5e-3/1e-2. Best train-MSE ratio
+vs the predict-zero baseline: 0.369 (N=50), 0.502 (N=100), 0.554 (N=200,
+LR=5e-3), 0.545 (N=200, LR=1e-2) — all well below the 0.95 "stuck" threshold,
+so **no evidence of an optimization/architecture bug**. The ratio worsening as
+N grows is the expected fixed-capacity-vs-more-data curve (total time samples
+= N × window_samples grows faster than this ~16k-parameter model's ability to
+fit them with zero regularization), not a red flag — the diagnostic signal is
+"does it ever get stuck near ratio≈1 regardless of tuning," and it doesn't.
+Note this script tests memorization capacity only (no held-out split by
+design) — it says nothing about generalization. Conclusion: proceed to the
+windowing sweep in `TRF_conv_mini_windowtest.py` rather than continuing to
+tune N/LR on the overfit check.
+
+**D2 shuffle-test result (2026-07-01):** `diagnostic_d2_shuffle.py` run on
+Sub2, both conditions. The circular-shift null collapses correctly (r≈0 both
+conditions), but the cross-trial pairing shuffle does **not** (acoustic:
+normal r=0.0759 vs xshuffle r=0.0757; surprisal: 0.0771 vs 0.0726) — the
+script's own "[!!] SUSPICIOUS — distribution leak" flag. This downgrades H2
+(regularisation mismatch — ridge's selected alpha=1e+01 is at the low end of
+the tested grid, not over-shrunk) and elevates the leak hypothesis (H3) as the
+better-supported explanation for the original conv-vs-ridge gap. This
+diagnostic also surfaced a discrepancy worth flagging: its own internal ridge
+r (0.0794/0.0821) is much higher than the previously documented `TRF_ridge_3.py`
+baseline for Sub2 (0.0236/0.0327), collapsing the conv/ridge ratio from the
+reported 3× down to ~0.94-0.96× — unreconciled (the script also loads 30
+trials for Sub2 vs the ~10/subject documented in `CLAUDE.md`). Full detail,
+including the recommended next step (run the same cross-trial shuffle on
+ridge itself), is in `TRF_conv_DIAGNOSTICS.md`.
+
 ---
 
 ## How to edit this model
@@ -216,10 +246,14 @@ Edit `constants.SUBJECTS` (it's a list at the top of `constants.py`).
 | `TRF_conv_1.py` | CNN-TRF, full-trial training, BatchNorm. |
 | `TRF_conv_2_windowed.py` | CNN-TRF, windowed mini-batch training, GroupNorm, default `nonlinear`. |
 | `TRF_conv_mini_windowtest.py` | Mini-test harness for the "mostly predicts ~0" concern. Single subject, ~100-window subset, sweeps `WINDOW_SECS_TO_TEST x OVERLAP_SECS_TO_TEST` (edit constants and re-run), reports `mse_ratio` (final train MSE / predict-zero baseline MSE) per config. Not LOOCV — a fast go/no-go signal before a full cohort run. |
+| `TRF_conv_mini_windowtest_traincurves.py` | Fork of the above that also tracks train-vs-val divergence per config (best_val_epoch/mse, val_uptick_from_best, final_gap, and a heuristic STABLE/OVERFITTING/UNDERFIT-OR-FLAT verdict from a smoothed val curve). Use this when `mse_ratio` alone doesn't tell you whether a config is "running optimally" or just overfitting a small subset. **Caveat found in the next script:** its val split is a random slice of the same shuffled window pool as training, so high-overlap configs get near-duplicate train/val windows — treat its STABLE/OVERFITTING verdicts as suspect for high-overlap configs specifically. |
+| `TRF_conv_mini_windowtest_trialholdout.py` | Fixes the leakage above: holds out whole trials (never windowed for training) instead of a shuffled slice of windows, and evaluates via real whole-trial inference — `heldout_r` (Pearson r, comparable in kind to production headline numbers) and `pred_std_ratio` (flags "still predicting ~the mean"). Overlap specified as a fraction of window length (`OVERLAP_FRAC_TO_TEST`) so low/high overlap is comparable across window sizes. Produces per-config and combined actual-vs-predicted alignment plots. This is the suggested interim step between the small mini-tests and a full LOOCV cohort run. **Holdout is by SONG identity (`HELD_OUT_N_SONGS`), not raw trial index** — an earlier index-based version produced implausible heldout_r ~0.5-0.6, traced to likely song repetition across trials (see below). |
+| `check_trial_song_repeats.py` | Standalone, no-model diagnostic. Prints `song_id` (= `stimulus_id % 10 or 10`, computed identically everywhere in this codebase) per trial for a subject and checks whether an index-based train/held-out split leaks repeated songs. Run this before trusting any held-out-trial r in this project — if songs repeat (Sub2 has 30 trials per `diagnostic_d2_shuffle.py`'s console output, against only 10 unique songs), **the production LOOCV protocol itself (`TRF_ridge_3.py`, `TRF_conv_1.py`, `TRF_conv_2_windowed.py`), which all split by trial index, may share this issue** — not yet confirmed. See `TRF_conv_DIAGNOSTICS.md` for the full reasoning, including a plausible link to the unresolved D2 cross-trial-shuffle finding. |
 | `TRF_conv_overfit_check.py` | Optimization-capacity sanity check, run alongside/before the windowing sweep. Same architecture, ~100 windows, `weight_decay=0`, no early stopping — tests whether the model CAN drive loss below the predict-zero baseline at all, to rule out an optimization/architecture bug as the cause of the collapse (as opposed to genuinely weak signal). |
 | `eeg_functions.py` | EEG loading and preprocessing. |
 | `midi_func.py` | Places IDyOM per-note values onto the 64 Hz time grid. |
 | `constants.py` | Paths, subject list, frequency band edges, SAVE_DIR. |
+| `diagnostic_d2_shuffle.py` | D2 null/shuffle test for the linear-conv-vs-ridge gap: circular-shift null (checks autocorrelation artifact) and cross-trial pairing shuffle (checks distribution leak), plus prints ridge's LOOCV-selected alpha. Run 2026-07-01 on Sub2 — see `TRF_conv_DIAGNOSTICS.md` for results. |
 | `TRF_conv_DIAGNOSTICS.md` | Active diagnostic plan for the linear-conv vs ridge mismatch. |
 | `EXPERIMENT_LOG.md` | Run registry (which script/variant/subjects produced each pickle subfolder) and open-question list. |
 | `CLAUDE.md` | High-level TRF project context for AI agents. |

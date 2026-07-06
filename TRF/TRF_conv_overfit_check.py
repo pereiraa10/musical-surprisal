@@ -116,7 +116,7 @@ CONDITION = 'acoustic_and_surprisal'
 #    windowing — TRF_conv_mini_windowtest.py is where you sweep those) ──────────
 WINDOW_SEC = 5.0
 HOP_SEC    = 1.0
-N_WINDOWS_SUBSET = 100
+N_WINDOWS_SUBSET = 50
 
 # ── [DIFFERENT FROM PRODUCTION] — see docstring for why ──────────────────────────
 LR           = 5e-3      # production uses 1e-3; higher here to reach a verdict faster

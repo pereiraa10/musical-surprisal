@@ -1,0 +1,80 @@
+Using device: mps
+✓ Loaded Non-musician (Subject Sub2)
+  - 30 trials, 64 channels @ 512 Hz
+  [pre] Trial 1: raw = 82395 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 1: post-preproc = 10236 samples @ 64 Hz
+  [pre] Trial 2: raw = 79891 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 2: post-preproc = 9923 samples @ 64 Hz
+  [pre] Trial 3: raw = 62544 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 3: post-preproc = 7754 samples @ 64 Hz
+  [pre] Trial 4: raw = 70553 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 4: post-preproc = 8756 samples @ 64 Hz
+  [pre] Trial 5: raw = 85879 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 5: post-preproc = 10671 samples @ 64 Hz
+  [pre] Trial 6: raw = 103070 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 6: post-preproc = 12820 samples @ 64 Hz
+  [pre] Trial 7: raw = 89690 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 7: post-preproc = 11148 samples @ 64 Hz
+  [pre] Trial 8: raw = 94316 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 8: post-preproc = 11726 samples @ 64 Hz
+  [pre] Trial 9: raw = 69721 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 9: post-preproc = 8652 samples @ 64 Hz
+  [pre] Trial 10: raw = 92212 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 10: post-preproc = 11463 samples @ 64 Hz
+  [pre] Trial 11: raw = 82395 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 11: post-preproc = 10236 samples @ 64 Hz
+  [pre] Trial 12: raw = 79891 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 12: post-preproc = 9923 samples @ 64 Hz
+  [pre] Trial 13: raw = 62544 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 13: post-preproc = 7754 samples @ 64 Hz
+  [pre] Trial 14: raw = 70553 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 14: post-preproc = 8756 samples @ 64 Hz
+  [pre] Trial 15: raw = 85879 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 15: post-preproc = 10671 samples @ 64 Hz
+  [pre] Trial 16: raw = 103070 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 16: post-preproc = 12820 samples @ 64 Hz
+  [pre] Trial 17: raw = 89690 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 17: post-preproc = 11148 samples @ 64 Hz
+  [pre] Trial 18: raw = 94316 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 18: post-preproc = 11726 samples @ 64 Hz
+  [pre] Trial 19: raw = 69721 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 19: post-preproc = 8652 samples @ 64 Hz
+  [pre] Trial 20: raw = 92212 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 20: post-preproc = 11463 samples @ 64 Hz
+  [pre] Trial 21: raw = 82395 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 21: post-preproc = 10236 samples @ 64 Hz
+  [pre] Trial 22: raw = 79891 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 22: post-preproc = 9923 samples @ 64 Hz
+  [pre] Trial 23: raw = 62544 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 23: post-preproc = 7754 samples @ 64 Hz
+  [pre] Trial 24: raw = 70553 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 24: post-preproc = 8756 samples @ 64 Hz
+  [pre] Trial 25: raw = 85879 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 25: post-preproc = 10671 samples @ 64 Hz
+  [pre] Trial 26: raw = 103070 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 26: post-preproc = 12820 samples @ 64 Hz
+  [pre] Trial 27: raw = 89690 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 27: post-preproc = 11148 samples @ 64 Hz
+  [pre] Trial 28: raw = 94316 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 28: post-preproc = 11726 samples @ 64 Hz
+  [pre] Trial 29: raw = 69721 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 29: post-preproc = 8652 samples @ 64 Hz
+  [pre] Trial 30: raw = 92212 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 30: post-preproc = 11463 samples @ 64 Hz
+
+Sub2 | acoustic | variant=nonlinear | 30 trials | features=2 channels=64
+
+  window= 2.0s overlap=0.7s hop=1.30s  n_avail= 3678 n_used= 100  train_mse=0.4778  baseline=1.1144  ratio=0.429  val_mse=0.8856
+  window= 2.0s overlap=1.0s hop=1.00s  n_avail= 4764 n_used= 100  train_mse=0.3727  baseline=0.7918  ratio=0.471  val_mse=0.7786
+  window= 3.0s overlap=0.7s hop=2.30s  n_avail= 2070 n_used= 100  train_mse=0.3896  baseline=0.6039  ratio=0.645  val_mse=0.5481
+  window= 3.0s overlap=1.0s hop=2.00s  n_avail= 2373 n_used= 100  train_mse=0.4070  baseline=0.7848  ratio=0.519  val_mse=0.5540
+  window= 5.0s overlap=0.7s hop=4.30s  n_avail= 1101 n_used= 100  train_mse=0.4327  baseline=0.6896  ratio=0.627  val_mse=0.5071
+  window= 5.0s overlap=1.0s hop=4.00s  n_avail= 1182 n_used= 100  train_mse=0.4480  baseline=1.0033  ratio=0.447  val_mse=0.8310
+  window= 8.0s overlap=0.7s hop=7.30s  n_avail=  642 n_used= 100  train_mse=0.4360  baseline=0.9879  ratio=0.441  val_mse=0.5331
+  window= 8.0s overlap=1.0s hop=7.00s  n_avail=  669 n_used= 100  train_mse=0.4528  baseline=0.8876  ratio=0.510  val_mse=0.6868
+  window=10.0s overlap=0.7s hop=9.30s  n_avail=  501 n_used= 100  train_mse=0.4490  baseline=0.8323  ratio=0.539  val_mse=0.6931
+  window=10.0s overlap=1.0s hop=9.00s  n_avail=  519 n_used= 100  train_mse=0.4655  baseline=0.7796  ratio=0.597  val_mse=0.5450
+Saved summary CSV -> /Users/arianapereira/Documents/Masters/Projects/SigMA/musical-surprisal/TRF/pickles/encoding_2026-07-01/mini_windowtest_summary_Sub2_acoustic.csv
+Saved loss-curve figure -> /Users/arianapereira/Documents/Masters/Projects/SigMA/musical-surprisal/TRF/pickles/encoding_2026-07-01/mini_windowtest_curves_Sub2_acoustic.png
+
+Best mse_ratio: window=2.0s overlap=0.7s -> ratio=0.429 (n_used=100)

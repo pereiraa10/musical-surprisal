@@ -1,0 +1,103 @@
+Using device: mps
+✓ Loaded Non-musician (Subject Sub2)
+  - 30 trials, 64 channels @ 512 Hz
+  [pre] Trial 1: raw = 82395 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 1: post-preproc = 10236 samples @ 64 Hz
+  [pre] Trial 2: raw = 79891 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 2: post-preproc = 9923 samples @ 64 Hz
+  [pre] Trial 3: raw = 62544 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 3: post-preproc = 7754 samples @ 64 Hz
+  [pre] Trial 4: raw = 70553 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 4: post-preproc = 8756 samples @ 64 Hz
+  [pre] Trial 5: raw = 85879 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 5: post-preproc = 10671 samples @ 64 Hz
+  [pre] Trial 6: raw = 103070 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 6: post-preproc = 12820 samples @ 64 Hz
+  [pre] Trial 7: raw = 89690 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 7: post-preproc = 11148 samples @ 64 Hz
+  [pre] Trial 8: raw = 94316 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 8: post-preproc = 11726 samples @ 64 Hz
+  [pre] Trial 9: raw = 69721 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 9: post-preproc = 8652 samples @ 64 Hz
+  [pre] Trial 10: raw = 92212 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 10: post-preproc = 11463 samples @ 64 Hz
+  [pre] Trial 11: raw = 82395 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 11: post-preproc = 10236 samples @ 64 Hz
+  [pre] Trial 12: raw = 79891 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 12: post-preproc = 9923 samples @ 64 Hz
+  [pre] Trial 13: raw = 62544 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 13: post-preproc = 7754 samples @ 64 Hz
+  [pre] Trial 14: raw = 70553 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 14: post-preproc = 8756 samples @ 64 Hz
+  [pre] Trial 15: raw = 85879 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 15: post-preproc = 10671 samples @ 64 Hz
+  [pre] Trial 16: raw = 103070 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 16: post-preproc = 12820 samples @ 64 Hz
+  [pre] Trial 17: raw = 89690 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 17: post-preproc = 11148 samples @ 64 Hz
+  [pre] Trial 18: raw = 94316 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 18: post-preproc = 11726 samples @ 64 Hz
+  [pre] Trial 19: raw = 69721 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 19: post-preproc = 8652 samples @ 64 Hz
+  [pre] Trial 20: raw = 92212 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 20: post-preproc = 11463 samples @ 64 Hz
+  [pre] Trial 21: raw = 82395 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 21: post-preproc = 10236 samples @ 64 Hz
+  [pre] Trial 22: raw = 79891 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 22: post-preproc = 9923 samples @ 64 Hz
+  [pre] Trial 23: raw = 62544 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 23: post-preproc = 7754 samples @ 64 Hz
+  [pre] Trial 24: raw = 70553 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 24: post-preproc = 8756 samples @ 64 Hz
+  [pre] Trial 25: raw = 85879 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 25: post-preproc = 10671 samples @ 64 Hz
+  [pre] Trial 26: raw = 103070 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 26: post-preproc = 12820 samples @ 64 Hz
+  [pre] Trial 27: raw = 89690 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 27: post-preproc = 11148 samples @ 64 Hz
+  [pre] Trial 28: raw = 94316 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 28: post-preproc = 11726 samples @ 64 Hz
+  [pre] Trial 29: raw = 69721 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 29: post-preproc = 8652 samples @ 64 Hz
+  [pre] Trial 30: raw = 92212 samples @ 512 Hz  (pad = 512 samples)
+  [pre] Trial 30: post-preproc = 11463 samples @ 64 Hz
+
+Sub2 | acoustic_and_surprisal | variant=nonlinear | n_used=200 windows | window=320smp hop=64smp | baseline_mse(predict-zero)=0.5372
+
+  epoch     0  train_mse=0.71340  ratio=1.328
+  epoch    50  train_mse=0.53630  ratio=0.998
+  epoch   100  train_mse=0.51880  ratio=0.966
+  epoch   150  train_mse=0.42826  ratio=0.797
+  epoch   200  train_mse=0.40227  ratio=0.749
+  epoch   250  train_mse=0.39059  ratio=0.727
+  epoch   300  train_mse=0.38111  ratio=0.709
+  epoch   350  train_mse=0.36985  ratio=0.689
+  epoch   400  train_mse=0.36322  ratio=0.676
+  epoch   450  train_mse=0.35643  ratio=0.664
+  epoch   500  train_mse=0.35299  ratio=0.657
+  epoch   550  train_mse=0.34708  ratio=0.646
+  epoch   600  train_mse=0.34298  ratio=0.638
+  epoch   650  train_mse=0.33799  ratio=0.629
+  epoch   700  train_mse=0.33568  ratio=0.625
+  epoch   750  train_mse=0.32877  ratio=0.612
+  epoch   800  train_mse=0.34415  ratio=0.641
+  epoch   850  train_mse=0.32382  ratio=0.603
+  epoch   900  train_mse=0.32044  ratio=0.597
+  epoch   950  train_mse=0.31705  ratio=0.590
+  epoch  1000  train_mse=0.31780  ratio=0.592
+  epoch  1050  train_mse=0.31425  ratio=0.585
+  epoch  1100  train_mse=0.31111  ratio=0.579
+  epoch  1150  train_mse=0.30903  ratio=0.575
+  epoch  1200  train_mse=0.30779  ratio=0.573
+  epoch  1250  train_mse=0.30405  ratio=0.566
+  epoch  1300  train_mse=0.30331  ratio=0.565
+  epoch  1350  train_mse=0.30651  ratio=0.571
+  epoch  1400  train_mse=0.30076  ratio=0.560
+  epoch  1450  train_mse=0.30016  ratio=0.559
+  epoch  1499  train_mse=0.30413  ratio=0.566
+
+Final train MSE: 0.30413  (baseline 0.53717, ratio 0.566)
+Best ratio reached during training: 0.554
+
+Verdict: AMBIGUOUS — some improvement over baseline but not a lot. Try more epochs / higher LR before concluding either way.
+Saved loss curve -> /Users/arianapereira/Documents/Masters/Projects/SigMA/musical-surprisal/TRF/pickles/encoding_2026-07-01/overfit_check_Sub2_acoustic_and_surprisal_nonlinear.png

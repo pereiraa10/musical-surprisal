@@ -1,72 +1,69 @@
 """
-TRF_conv_mini_windowtest.py
+TRF_conv_mini_windowtest_traincurves.py
 ────────────────────────────────────────────────────────────────────────────────
-Fast, small-N diagnostic harness for comparing windowing/segmentation techniques
-BEFORE committing to a full LOOCV cohort run with TRF_conv_2_windowed.py.
+Fork of TRF_conv_mini_windowtest.py that adds train-vs-validation divergence
+tracking, so you can see whether a windowing config is training "optimally"
+(train and val error move together / both plateau) or overfitting (train keeps
+dropping while val flattens out or rises).
 
 WHY THIS SCRIPT EXISTS
 ────────────────────────────────────────────────────────────────────────────────
-TRF_conv_2_windowed.py (nonlinear variant) has been observed to mostly predict ~0
-(i.e. collapse toward the per-trial mean) rather than tracking held-out EEG. Before
-re-running the full 20-subject x 2-condition LOOCV pipeline for every windowing idea,
-this script trains the SAME architecture on a small, fixed-size subset of windows
-(~100 by default) from a SINGLE subject, across a sweep of window lengths and overlap
-amounts, and reports whether training loss drops meaningfully below the trivial
-"predict zero" baseline for each configuration.
+TRF_conv_mini_windowtest.py already computes a val_mse_hist per config (a
+random VAL_FRACTION split of the ~100-window subset) but only ever reports and
+plots the FINAL val MSE — the per-epoch trajectory, and specifically how it
+compares to the train trajectory over time, was being thrown away. That
+trajectory is exactly what tells you whether a config is "running optimally":
+- Train and val dropping together, gap staying small and roughly constant →
+  the model is fitting real, generalizable structure at that window/overlap.
+- Train continuing to drop while val plateaus or turns upward after an early
+  minimum → classic overfitting; the model is starting to memorize
+  window-specific noise rather than a shared feature→EEG mapping.
+- Both flat near the baseline the whole time → underfitting / no signal found
+  at that config (already partly visible via mse_ratio in the base script).
 
-IMPORTANT FRAMING — read before interpreting results
+IMPORTANT CAVEAT — read before trusting the divergence signal
 ────────────────────────────────────────────────────────────────────────────────
-TRF_ridge_3.py (the closed-form ground truth) only achieves held-out r ~ 0.02-0.03
-on this dataset, i.e. even the "correct" linear model explains roughly 0.05-0.1% of
-EEG variance. Against that, "predict ~0" is a strong MSE minimum, not obviously a
-bug. The bar for a windowing config to clear here is NOT "produces dramatic
-predictions" — it's "final train MSE drops measurably below the baseline_mse
-(=mean(Y**2), i.e. the loss of predicting exactly zero) within a fixed epoch
-budget." Use the printed/plotted mse_ratio (final_train_mse / baseline_mse) to
-compare configs: closer to 0 is better, ~1.0 means "learned nothing beyond the
-mean," and use it to shortlist 1-2 configs to validate on more subjects before
-touching the full LOOCV pipeline.
+VAL_FRACTION carves off a slice of an already-tiny ~100-window subset — with
+the defaults below that's ~20 validation windows. Epoch-to-epoch val MSE at
+that sample size is noisy; do not over-read small wiggles. What's meaningful
+is the SHAPE over many epochs (a sustained upward trend after an early
+minimum) not single-epoch jitter. A light rolling-average smoothing is applied
+to the plotted val curve for readability (raw values are still used for the
+numeric summary/verdict). This script is still a small-N go/no-go signal, not
+a substitute for the full LOOCV protocol.
 
-This script does NOT reproduce the LOOCV protocol and its r values are NOT
-comparable to TRF_ridge_3 / TRF_conv_1 / TRF_conv_2_windowed headline numbers. It
-trains on a small held-in subset with a fixed epoch budget and no early stopping —
-purely a fast go/no-go signal for the architecture + windowing combination.
-
-WHAT IS COPIED VERBATIM FROM TRF_conv_2_windowed.py
+WHAT IS COPIED VERBATIM FROM TRF_conv_mini_windowtest.py
 ────────────────────────────────────────────────────────────────────────────────
-- Receptive-field constants (TMIN, TMAX, SFREQ, IC_CLIP -> N_LAGS/LAG_MIN/LAG_MAX)
-- CausalPad, StimToEEG (all three variants) — identical architecture, so results
-  here are informative about the actual production model, not a toy stand-in.
-- zscore(), _make_windows(), _count_windows(), WindowDataset — identical windowing
-  utilities (window_samples / hop_samples are supplied per-config here instead of
-  fixed constants).
-- Stimulus / IDyOM loading and per-trial feature assembly (the block that builds
-  `trials` from `dataStim.mat` + IDyOM surprisal/entropy .mat files + MIDI onsets).
-  Restricted to a single subject instead of looping `constants.SUBJECTS`.
+- All config constants, receptive-field derivation, CausalPad/StimToEEG,
+  windowing utilities, WindowDataset, stimulus/IDyOM loading, single-subject
+  data prep, and the WINDOW_SECS_TO_TEST x OVERLAP_SECS_TO_TEST sweep loop.
+- run_window_config's training loop is unchanged (same model, same optimizer,
+  same fixed EPOCHS budget, no early stopping) — only what it COMPUTES and
+  RETURNS from the histories it was already tracking is extended.
 
 WHAT IS NEW
 ────────────────────────────────────────────────────────────────────────────────
-- WINDOW_SECS_TO_TEST / OVERLAP_SECS_TO_TEST sweep (constants below — edit and
-  re-run; no code changes needed to try a new window/overlap combination).
-- N_WINDOWS_SUBSET cap: each config uses at most this many windows (pooled across
-  ALL trials of SUBJECT, shuffled with a fixed seed), for fast iteration. If a
-  config's window/overlap combo can't produce N_WINDOWS_SUBSET windows from the
-  available trials, it uses whatever is available and prints a clear warning —
-  it does NOT fabricate data to hit the target count. (Sanity-checked with
-  synthetic 10-trial/~60s data: the 8s and 10s window configs only yield
-  ~60-80 windows total from one subject's trials, well short of 100 — expect
-  the warning to fire for those configs unless you widen SUBJECT's trial count
-  or lower N_WINDOWS_SUBSET.)
-- No LOOCV, no early stopping: fixed EPOCHS budget, train/val is a simple
-  random split of the small subset (VAL_FRACTION), purely to see a validation
-  trend — not a rigorous held-out estimate.
-- Baseline-relative reporting: every config reports mse_ratio = final_train_mse /
-  baseline_mse(=mean(Y**2)) so "did it learn anything at all" is a number, not a
-  visual judgment call.
-- Summary CSV + a small-multiples loss-curve figure across all configs.
+- Per-config generalization-gap metrics computed from the existing
+  train_mse_hist / val_mse_hist: final_gap, gap_ratio, best_val_mse,
+  best_val_epoch, val_uptick_from_best (how much val has risen from its own
+  best point by the end of training — the key overfitting signal), and a
+  heuristic verdict string (STABLE / OVERFITTING / UNDERFIT-OR-FLAT) per
+  config, in the same spirit as TRF_conv_overfit_check.py's PASS/AMBIGUOUS/FLAG.
+  best_val_epoch/best_val_mse/val_uptick_from_best are computed from the
+  SMOOTHED val curve (same SMOOTH_WINDOW used for plotting) — on the raw
+  per-epoch curve, a single noisy low point in a ~20-window val split can look
+  like a spurious "best epoch" and make a stable run look overfit or mask a
+  real one.
+- plot_train_val_curves: small-multiples figure (one panel per window size,
+  like the base script) with BOTH train (solid) and smoothed val (dashed)
+  curves per overlap, so divergence is visible directly.
+- plot_gap_curves: a second figure plotting (val - train) per epoch per
+  config — the divergence trajectory itself, which is easier to read than
+  eyeballing two overlapping curves when the gap is subtle.
+- Extended summary CSV with the new gap columns.
 
 Run from musical-surprisal/TRF/:
-    python TRF_conv_mini_windowtest.py
+    python TRF_conv_mini_windowtest_traincurves.py
 
 NOTE: requires PyTorch. No GPU required. Requires the same dataset dependencies
 as TRF_conv_2_windowed.py (constants.EEG_DIR .mat files, IDyOM surprisal .mat
@@ -101,7 +98,7 @@ import eelbrain
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# Config — receptive field (verbatim from TRF_conv_2_windowed.py)
+# Config — receptive field (verbatim from TRF_conv_mini_windowtest.py)
 # ════════════════════════════════════════════════════════════════════════════════
 
 TMIN  = -0.1
@@ -121,18 +118,29 @@ WEIGHT_DECAY  = 1e-3
 
 # ── Mini-test scope ──────────────────────────────────────────────────────────────
 SUBJECT   = 'Sub2'                      # single subject for fast iteration
-CONDITION = 'acoustic'    # 'acoustic' | 'acoustic_and_surprisal'
+CONDITION = 'acoustic'                  # 'acoustic' | 'acoustic_and_surprisal'
 
-# ── [NEW] Windowing sweep — EDIT THESE AND RE-RUN, no other code changes needed ──
-WINDOW_SECS_TO_TEST  = [2.0, 3.0, 5.0, 8.0, 10.0]   # window length, seconds
-OVERLAP_SECS_TO_TEST = [0.7, 1.0]                    # overlap between consecutive
+# ── Windowing sweep — EDIT THESE AND RE-RUN, no other code changes needed ──────
+WINDOW_SECS_TO_TEST  = [7.0]   # window length, seconds
+OVERLAP_SECS_TO_TEST = [3.0, 4.0, 4.3]                    # overlap between consecutive
                                                       # windows, seconds
                                                       # (hop_sec = window_sec - overlap_sec)
 
-N_WINDOWS_SUBSET = 100     # cap per config; uses fewer + warns if unavailable
-VAL_FRACTION     = 0.2     # fraction of the subset held out (quick trend only)
+N_WINDOWS_SUBSET = 600     # cap per config; uses fewer + warns if unavailable
+VAL_FRACTION     = 0.2     # fraction of the subset held out (quick trend only —
+                           # ~20 windows at defaults; see caveat in docstring)
 EPOCHS           = 300     # fixed budget; NO early stopping in this harness
 BATCH_SIZE       = 16
+
+# ── [NEW] Divergence-tracking knobs ──────────────────────────────────────────────
+SMOOTH_WINDOW = 1   # rolling-average window (epochs) applied to val curves for
+                     # plotting only, to reduce small-val-set noise; set to 1 to
+                     # disable smoothing.
+# Heuristic verdict thresholds (not a formal test — see docstring caveat):
+#   val_uptick_from_best, relative to baseline_mse, above this -> "OVERFITTING"
+OVERFIT_UPTICK_FRAC = 0.05
+#   final_train_mse / baseline_mse above this (i.e. it never really learned) -> "UNDERFIT-OR-FLAT"
+UNDERFIT_RATIO = 0.9
 
 DEBUG = True
 SEED  = 0
@@ -158,9 +166,18 @@ def zscore(x):
     return (x - x.mean(axis=0)) / x.std(axis=0)
 
 
+def _smooth(series, window):
+    if window <= 1 or len(series) < window:
+        return np.asarray(series, dtype=float)
+    kernel = np.ones(window) / window
+    # 'same'-length convolution with edge padding so the smoothed curve still
+    # spans the full epoch range (useful for plotting alongside the raw train curve).
+    padded = np.pad(series, (window // 2, window - 1 - window // 2), mode='edge')
+    return np.convolve(padded, kernel, mode='valid')
+
+
 # ════════════════════════════════════════════════════════════════════════════════
-# Windowing utilities (verbatim from TRF_conv_2_windowed.py, window/hop passed
-# explicitly per-config instead of fixed module constants)
+# Windowing utilities (verbatim from TRF_conv_mini_windowtest.py)
 # ════════════════════════════════════════════════════════════════════════════════
 
 def _make_windows(X, Y, window_samples, hop_samples):
@@ -186,8 +203,7 @@ class WindowDataset(Dataset):
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# Model (verbatim from TRF_conv_2_windowed.py — identical architecture so results
-# are informative about the real production model, not a toy stand-in)
+# Model (verbatim from TRF_conv_mini_windowtest.py / TRF_conv_2_windowed.py)
 # ════════════════════════════════════════════════════════════════════════════════
 
 class CausalPad(nn.Module):
@@ -241,17 +257,14 @@ class StimToEEG(nn.Module):
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# [NEW] Per-config mini-test
+# [NEW] Per-config mini-test with train/val divergence tracking
 # ════════════════════════════════════════════════════════════════════════════════
 
 def run_window_config(window_sec, overlap_sec, X_trials, Y_trials,
                        n_features, n_channels):
-    """Build a ~N_WINDOWS_SUBSET-window dataset for one (window_sec, overlap_sec)
-    config, train StimToEEG on it for a fixed epoch budget (no early stopping),
-    and report whether training loss drops below the predict-zero baseline.
-
-    Returns a SimpleNamespace with the config, window-availability info, and
-    train/val loss histories.
+    """Same training procedure as TRF_conv_mini_windowtest.py's run_window_config.
+    Extends the returned SimpleNamespace with generalization-gap metrics derived
+    from the train_mse_hist / val_mse_hist that were already being recorded.
     """
     hop_sec = window_sec - overlap_sec
     if hop_sec <= 0:
@@ -262,7 +275,6 @@ def run_window_config(window_sec, overlap_sec, X_trials, Y_trials,
     window_samples = int(round(window_sec * SFREQ))
     hop_samples = max(1, int(round(hop_sec * SFREQ)))
 
-    # Pool windows from ALL trials of SUBJECT; no window crosses a trial boundary.
     all_X_wins, all_Y_wins = [], []
     for X, Y in zip(X_trials, Y_trials):
         xw, yw = _make_windows(X, Y, window_samples, hop_samples)
@@ -279,7 +291,6 @@ def run_window_config(window_sec, overlap_sec, X_trials, Y_trials,
     Y_wins = np.concatenate(all_Y_wins, axis=0)
     n_available = X_wins.shape[0]
 
-    # Shuffle (fixed seed) and cap at N_WINDOWS_SUBSET.
     idx = _rng.permutation(n_available)
     n_used = min(N_WINDOWS_SUBSET, n_available)
     if n_used < N_WINDOWS_SUBSET:
@@ -294,7 +305,7 @@ def run_window_config(window_sec, overlap_sec, X_trials, Y_trials,
     X_val, Y_val = X_wins[:n_val], Y_wins[:n_val]
     X_tr, Y_tr = X_wins[n_val:], Y_wins[n_val:]
 
-    baseline_mse = float(np.mean(Y_wins ** 2))  # loss of predicting exactly zero
+    baseline_mse = float(np.mean(Y_wins ** 2))
 
     train_loader = DataLoader(
         WindowDataset(X_tr, Y_tr),
@@ -335,10 +346,40 @@ def run_window_config(window_sec, overlap_sec, X_trials, Y_trials,
     final_train_mse = train_mse_hist[-1]
     final_val_mse = val_mse_hist[-1] if val_mse_hist else float('nan')
 
+    # ── [NEW] Generalization-gap metrics from the existing histories ────────────
+    # Verdict-relevant quantities (best_val_epoch/mse, uptick) are computed from
+    # the SMOOTHED val curve, not the raw per-epoch values: with only ~n_val
+    # windows (often ~20), a single noisy epoch can look like a spurious "best"
+    # point and make an otherwise-stable run look overfit (or vice versa). The
+    # smoothing here must match SMOOTH_WINDOW used for plotting so the verdict
+    # is consistent with what the figures show.
+    if val_mse_hist:
+        val_smoothed = _smooth(val_mse_hist, SMOOTH_WINDOW)
+        best_val_epoch = int(np.argmin(val_smoothed))
+        best_val_mse = float(val_smoothed[best_val_epoch])
+        final_val_mse_smoothed = float(val_smoothed[-1])
+        val_uptick_from_best = final_val_mse_smoothed - best_val_mse
+        final_gap = final_val_mse - final_train_mse
+        gap_ratio = final_val_mse / final_train_mse if final_train_mse > 0 else float('nan')
+
+        if val_uptick_from_best > OVERFIT_UPTICK_FRAC * baseline_mse:
+            verdict = 'OVERFITTING'
+        elif final_train_mse / baseline_mse > UNDERFIT_RATIO:
+            verdict = 'UNDERFIT-OR-FLAT'
+        else:
+            verdict = 'STABLE'
+    else:
+        best_val_epoch, best_val_mse = -1, float('nan')
+        val_uptick_from_best = float('nan')
+        final_gap = float('nan')
+        gap_ratio = float('nan')
+        verdict = 'NO-VAL-SPLIT'
+
     print(f"  window={window_sec:>4.1f}s overlap={overlap_sec:>3.1f}s "
           f"hop={hop_sec:.2f}s  n_avail={n_available:>5d} n_used={n_used:>4d}  "
-          f"train_mse={final_train_mse:.4f}  baseline={baseline_mse:.4f}  "
-          f"ratio={final_train_mse / baseline_mse:.3f}  val_mse={final_val_mse:.4f}")
+          f"train_mse={final_train_mse:.4f}  val_mse={final_val_mse:.4f}  "
+          f"gap={final_gap:.4f}  best_val@{best_val_epoch}={best_val_mse:.4f}  "
+          f"uptick={val_uptick_from_best:.4f}  [{verdict}]")
 
     return SimpleNamespace(
         window_sec=window_sec, overlap_sec=overlap_sec, hop_sec=hop_sec,
@@ -348,51 +389,102 @@ def run_window_config(window_sec, overlap_sec, X_trials, Y_trials,
         train_mse_hist=train_mse_hist, val_mse_hist=val_mse_hist,
         final_train_mse=final_train_mse, final_val_mse=final_val_mse,
         mse_ratio=final_train_mse / baseline_mse,
+        best_val_mse=best_val_mse, best_val_epoch=best_val_epoch,
+        val_uptick_from_best=val_uptick_from_best,
+        final_gap=final_gap, gap_ratio=gap_ratio,
+        verdict=verdict,
     )
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# Reporting
+# [NEW] Reporting — train/val overlay + gap trajectory
 # ════════════════════════════════════════════════════════════════════════════════
 
 def save_summary_csv(results, save_dir):
-    fname = save_dir / f"mini_windowtest_summary_{SUBJECT}_{CONDITION}.csv"
+    fname = save_dir / f"mini_windowtest_traincurves_summary_{SUBJECT}_{CONDITION}.csv"
     with open(fname, 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow(['window_sec', 'overlap_sec', 'hop_sec', 'n_available', 'n_used',
-                    'baseline_mse', 'final_train_mse', 'final_val_mse', 'mse_ratio'])
+                    'baseline_mse', 'final_train_mse', 'final_val_mse', 'mse_ratio',
+                    'best_val_mse', 'best_val_epoch', 'val_uptick_from_best',
+                    'final_gap', 'gap_ratio', 'verdict'])
         for r in results:
             w.writerow([r.window_sec, r.overlap_sec, r.hop_sec, r.n_available,
                         r.n_used, r.baseline_mse, r.final_train_mse,
-                        r.final_val_mse, r.mse_ratio])
+                        r.final_val_mse, r.mse_ratio, r.best_val_mse,
+                        r.best_val_epoch, r.val_uptick_from_best,
+                        r.final_gap, r.gap_ratio, r.verdict])
     print(f"Saved summary CSV -> {fname}")
 
 
-def plot_loss_curves(results, save_dir):
+def plot_train_val_curves(results, save_dir):
+    """Small-multiples figure (one panel per window size): solid = train MSE,
+    dashed = smoothed val MSE, per overlap. Divergence shows up as the dashed
+    line pulling away from (typically above) the solid line."""
     windows = sorted(set(r.window_sec for r in results))
-    fig, axes = plt.subplots(1, len(windows), figsize=(4 * len(windows), 4),
+    fig, axes = plt.subplots(1, len(windows), figsize=(4.5 * len(windows), 4),
                               sharey=True)
     if len(windows) == 1:
         axes = [axes]
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
     for ax, w in zip(axes, windows):
-        for r in [r for r in results if r.window_sec == w]:
-            ax.plot(r.train_mse_hist, label=f"overlap={r.overlap_sec}s")
-            ax.axhline(r.baseline_mse, linestyle='--', color='grey', linewidth=0.8)
+        for c, r in enumerate([r for r in results if r.window_sec == w]):
+            color = colors[c % len(colors)]
+            ax.plot(r.train_mse_hist, color=color, linestyle='-',
+                    label=f"overlap={r.overlap_sec}s train")
+            if r.val_mse_hist:
+                smoothed_val = _smooth(r.val_mse_hist, SMOOTH_WINDOW)
+                ax.plot(smoothed_val, color=color, linestyle='--',
+                        label=f"overlap={r.overlap_sec}s val (smoothed)")
+            ax.axhline(r.baseline_mse, linestyle=':', color='grey', linewidth=0.7)
         ax.set_title(f"window={w}s")
         ax.set_xlabel('epoch')
         ax.set_yscale('log')
-    axes[0].set_ylabel('train MSE (log scale)\n(dashed = predict-zero baseline)')
-    axes[0].legend(fontsize=8)
-    fig.suptitle(f"Mini window-test — {SUBJECT} | {CONDITION} | {MODEL_VARIANT}")
+    axes[0].set_ylabel('MSE (log scale)\nsolid=train, dashed=val, dotted=baseline')
+    axes[0].legend(fontsize=6.5, loc='upper right')
+    fig.suptitle(f"Train vs val — {SUBJECT} | {CONDITION} | {MODEL_VARIANT}")
     plt.tight_layout()
-    fname = save_dir / f"mini_windowtest_curves_{SUBJECT}_{CONDITION}.png"
+    fname = save_dir / f"mini_windowtest_traincurves_{SUBJECT}_{CONDITION}.png"
     plt.savefig(fname, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f"Saved loss-curve figure -> {fname}")
+    print(f"Saved train/val curves -> {fname}")
+
+
+def plot_gap_curves(results, save_dir):
+    """Second figure: (val - train) per epoch per config — the divergence
+    trajectory itself. A flat-near-zero or slowly-shrinking line is healthy;
+    a line that climbs steadily and doesn't turn back down is the overfitting
+    signature to watch for."""
+    windows = sorted(set(r.window_sec for r in results))
+    fig, axes = plt.subplots(1, len(windows), figsize=(4.5 * len(windows), 4),
+                              sharey=True)
+    if len(windows) == 1:
+        axes = [axes]
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    for ax, w in zip(axes, windows):
+        for c, r in enumerate([r for r in results if r.window_sec == w]):
+            if not r.val_mse_hist:
+                continue
+            color = colors[c % len(colors)]
+            n = min(len(r.train_mse_hist), len(r.val_mse_hist))
+            gap = np.asarray(r.val_mse_hist[:n]) - np.asarray(r.train_mse_hist[:n])
+            gap_smoothed = _smooth(gap, SMOOTH_WINDOW)
+            ax.plot(gap_smoothed, color=color, label=f"overlap={r.overlap_sec}s")
+        ax.axhline(0, linestyle=':', color='grey', linewidth=0.7)
+        ax.set_title(f"window={w}s")
+        ax.set_xlabel('epoch')
+    axes[0].set_ylabel('val MSE − train MSE (smoothed)\n(rising = diverging)')
+    axes[0].legend(fontsize=7)
+    fig.suptitle(f"Train/val gap — {SUBJECT} | {CONDITION} | {MODEL_VARIANT}")
+    plt.tight_layout()
+    fname = save_dir / f"mini_windowtest_gap_{SUBJECT}_{CONDITION}.png"
+    plt.savefig(fname, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f"Saved gap-trajectory figure -> {fname}")
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# Stimulus / IDyOM loading (verbatim from TRF_conv_2_windowed.py)
+# Stimulus / IDyOM loading (verbatim from TRF_conv_mini_windowtest.py)
 # ════════════════════════════════════════════════════════════════════════════════
 
 stim_mat = loadmat(constants.EEG_DIR / "dataStim.mat",
@@ -429,8 +521,7 @@ stim_onset_entropy_ndvars   = {}
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# Single-subject data prep (restricted version of the TRF_conv_2_windowed.py loop —
-# runs for SUBJECT only, not constants.SUBJECTS)
+# Single-subject data prep (verbatim from TRF_conv_mini_windowtest.py)
 # ════════════════════════════════════════════════════════════════════════════════
 
 eeg_data = eeg_func.load_subject_raw_eeg(
@@ -519,7 +610,7 @@ print(f"\n{SUBJECT} | {CONDITION} | variant={MODEL_VARIANT} "
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# [NEW] Run the window/overlap sweep
+# Run the window/overlap sweep
 # ════════════════════════════════════════════════════════════════════════════════
 
 results = []
@@ -534,30 +625,49 @@ for window_sec, overlap_sec in product(WINDOW_SECS_TO_TEST, OVERLAP_SECS_TO_TEST
 
 if results:
     save_summary_csv(results, constants.SAVE_DIR)
-    plot_loss_curves(results, constants.SAVE_DIR)
+    plot_train_val_curves(results, constants.SAVE_DIR)
+    plot_gap_curves(results, constants.SAVE_DIR)
 
     best = min(results, key=lambda r: r.mse_ratio)
     print(f"\nBest mse_ratio: window={best.window_sec}s overlap={best.overlap_sec}s "
-          f"-> ratio={best.mse_ratio:.3f} (n_used={best.n_used})")
+          f"-> ratio={best.mse_ratio:.3f} (verdict={best.verdict}, "
+          f"gap={best.final_gap:.4f})")
+
+    stable = [r for r in results if r.verdict == 'STABLE']
+    if stable:
+        best_stable = min(stable, key=lambda r: r.mse_ratio)
+        print(f"Best STABLE config (train/val tracked without overfitting): "
+              f"window={best_stable.window_sec}s overlap={best_stable.overlap_sec}s "
+              f"-> ratio={best_stable.mse_ratio:.3f}")
+    else:
+        print("No config was labeled STABLE — check the OVERFITTING / "
+              "UNDERFIT-OR-FLAT configs and consider adjusting EPOCHS, "
+              "WEIGHT_DECAY, or OVERFIT_UPTICK_FRAC.")
 else:
     print("No configs produced any windows — check WINDOW_SECS_TO_TEST against "
           "trial lengths for this subject.")
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# MODIFICATION SUMMARY vs TRF_conv_2_windowed.py
+# MODIFICATION SUMMARY vs TRF_conv_mini_windowtest.py
 # ════════════════════════════════════════════════════════════════════════════════
 #
-# [NEW] Single-subject scope (SUBJECT constant) instead of looping constants.SUBJECTS.
-# [NEW] WINDOW_SECS_TO_TEST x OVERLAP_SECS_TO_TEST sweep (see run_window_config).
-# [NEW] N_WINDOWS_SUBSET cap with graceful degradation + warning when a config
-#       can't reach the target count from the available trials.
-# [NEW] No LOOCV, no early stopping — fixed EPOCHS, simple train/val split of the
-#       small subset, purely for a fast trend signal.
-# [NEW] baseline_mse / mse_ratio reporting: turns "is it learning" into a number,
-#       given how weak the true signal is here (ridge r ~ 0.02-0.03).
-# [NEW] Per-config CSV summary + small-multiples loss-curve figure.
+# [NEW] Generalization-gap metrics per config computed from the train/val
+#       histories that were already being recorded but previously discarded
+#       after the loop: best_val_mse, best_val_epoch, val_uptick_from_best,
+#       final_gap, gap_ratio, and a heuristic STABLE/OVERFITTING/
+#       UNDERFIT-OR-FLAT verdict (thresholds: OVERFIT_UPTICK_FRAC, UNDERFIT_RATIO).
+# [NEW] plot_train_val_curves: train (solid) + smoothed val (dashed) overlay
+#       per config, small-multiples by window size.
+# [NEW] plot_gap_curves: (val - train) trajectory per config — the divergence
+#       signal directly, easier to read than two overlapping curves.
+# [NEW] SMOOTH_WINDOW rolling-average smoothing applied to val curves only,
+#       for plotting/verdict legibility given the small (~20-window) val split.
+# [NEW] Extended summary CSV with the gap columns; prints the best STABLE
+#       config (not just the lowest mse_ratio overall) at the end of the run.
 #
 # UNCHANGED: receptive-field constants, CausalPad/StimToEEG architecture,
 #            windowing utilities, stimulus/IDyOM loading and per-trial feature
-#            assembly, per-trial z-scoring.
+#            assembly, per-trial z-scoring, the training loop itself (same
+#            optimizer/epochs/batch size — only what's computed from its
+#            output histories is new).
