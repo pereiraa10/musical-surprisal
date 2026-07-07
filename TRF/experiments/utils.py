@@ -21,11 +21,14 @@ import warnings
 from functools import lru_cache
 from math import gcd
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
+import pandas as pd
 import pretty_midi
+import soundfile as sf
 from scipy.io import loadmat
-from scipy.signal import resample_poly, butter, sosfiltfilt
+from scipy.signal import resample_poly, butter, sosfiltfilt, hilbert
 
 import eelbrain
 import mne
@@ -38,6 +41,26 @@ from mne.channels import make_dig_montage
 
 def zscore(x):
     return (x - x.mean(axis=0)) / x.std(axis=0)
+
+
+def compute_envelope_from_audio(path, target_fs):
+    """Broadband amplitude envelope of an audio file (.wav/.mp3/...),
+    resampled to `target_fs`. Used when a dataset ships raw stimulus audio
+    instead of a precomputed envelope (e.g. no equivalent of liberi's
+    dataStim.mat): loads the mono mixdown at its native sample rate, takes
+    the analytic-signal (Hilbert) magnitude as the envelope, then
+    polyphase-resamples to `target_fs`.
+
+    Uses soundfile (libsndfile, incl. its mp3 support) rather than
+    librosa.load: librosa's audio-loading path unconditionally imports numba,
+    which at the time of writing rejects the numpy version this project
+    otherwise pins, making librosa.load unusable in that environment."""
+    audio, sr = sf.read(str(path), always_2d=False)
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)  # downmix to mono
+    envelope = np.abs(hilbert(audio.astype(np.float64)))
+    g = gcd(target_fs, sr)
+    return resample_poly(envelope, target_fs // g, sr // g)
 
 
 def align_trial(eeg, stim_arrays, trial_idx, subject, max_diff=2):
@@ -92,32 +115,43 @@ def song_id_for_marker(stimulus_id, trial_to_song_id_table):
 
 # ── EEG loading (format dispatch) ──────────────────────────────────────────────
 
-def load_subject_raw_eeg(filepath, subject):
+def load_subject_raw_eeg(filepath, subject, trial_to_stimulus=None):
     """Load one subject's raw EEG, dispatching on file format.
 
     Thin dispatcher: `.mat` files go through _load_eeg_from_mat; any other
-    extension is handed to _load_eeg_from_other_format (a stub to fill in for a
-    new dataset). Both return the same `eeg_data` dict shape, so everything
-    downstream (preprocess_eeg_trials, create_mne_raw_from_preprocessed) is
-    format-agnostic:
+    extension is handed to _load_eeg_from_other_format. Both return the same
+    `eeg_data` dict shape, so everything downstream (preprocess_eeg_trials,
+    create_mne_raw_from_preprocessed) is format-agnostic:
 
         {
-          'trials':    list of per-trial (n_time, n_channels) arrays, in raw
-                       counts/volts BEFORE any filtering (still padded),
-          'fs':        int, original sampling rate in Hz (no resampling done),
-          'chanlocs':  iterable of channel objects/dicts exposing a `.labels`
-                       name and `.X`/`.Y`/`.Z` position attributes,
-          'pad_start': int, leading-padding sample count expressed at `fs`,
+          'trials':         list of per-trial (n_time, n_channels) arrays, in
+                             raw counts/volts BEFORE any filtering (still
+                             padded),
+          'fs':              int, original sampling rate in Hz (no resampling
+                             done),
+          'chanlocs':        iterable of channel objects/dicts exposing a
+                             `.labels` name and `.X`/`.Y`/`.Z` position
+                             attributes,
+          'pad_start':       int, leading-padding sample count expressed at
+                             `fs`,
+          'stimulus_paths':  optional, list of per-trial stimulus audio paths
+                             (or None entries) — only present for formats
+                             whose stimulus identity isn't a simple trial
+                             index (see _load_eeg_from_edf).
         }
 
     subject_type is deliberately NOT part of this dict — it's subject metadata,
     not EEG-file content; TRFDataset looks it up from config.subject_type.
+
+    trial_to_stimulus : only used by non-.mat formats that can't determine
+        stimulus identity from the EEG file itself (see _load_eeg_from_edf);
+        ignored for `.mat`.
     """
     filepath = Path(filepath)
     suffix = filepath.suffix.lower()
     if suffix == '.mat':
         return _load_eeg_from_mat(filepath, subject)
-    return _load_eeg_from_other_format(filepath, subject)
+    return _load_eeg_from_other_format(filepath, subject, trial_to_stimulus)
 
 
 def _load_eeg_from_mat(filepath, subject):
@@ -150,12 +184,10 @@ def _load_eeg_from_mat(filepath, subject):
     return eeg_data
 
 
-def _load_eeg_from_other_format(filepath, subject):
-    """Stub for loading raw EEG from a non-.mat source (e.g. .fif, .edf, .set).
-
-    A future implementation must return the same `eeg_data` dict shape that
-    _load_eeg_from_mat produces, so it flows through preprocess_eeg_trials
-    unchanged:
+def _load_eeg_from_other_format(filepath, subject, trial_to_stimulus=None):
+    """Dispatch non-.mat EEG formats. Each implementation must return the same
+    `eeg_data` dict shape that _load_eeg_from_mat produces, so it flows
+    through preprocess_eeg_trials unchanged:
 
         {
           'trials':    list of per-trial (n_time, n_channels) numpy arrays, in
@@ -170,12 +202,129 @@ def _load_eeg_from_other_format(filepath, subject):
                        (0 if the format has no padding convention),
         }
     """
+    suffix = filepath.suffix.lower()
+    if suffix == '.edf':
+        return _load_eeg_from_edf(filepath, subject, trial_to_stimulus)
     raise NotImplementedError(
         f"EEG loading for '{filepath.suffix}' files is not implemented "
-        f"(subject {subject}, path {filepath}). Only '.mat' is supported today; "
-        "implement _load_eeg_from_other_format to return the documented "
-        "eeg_data dict shape for this format."
+        f"(subject {subject}, path {filepath}). Only '.mat' and '.edf' are "
+        "supported today; extend _load_eeg_from_other_format to return the "
+        "documented eeg_data dict shape for this format."
     )
+
+
+# Event-marker code for "trial start, music played to participant" in the
+# ds002725 (Daly et al. 2019) BIDS release's *_events.tsv files.
+_DALY_TRIAL_START_MARKER = 768
+
+
+def _load_eeg_from_edf(filepath, subject, trial_to_stimulus):
+    """Load raw EEG from a BIDS-style continuous .edf recording (one file per
+    subject x task, e.g. ds002725/Daly et al. 2019), segmenting trials from
+    the sibling `*_events.tsv`'s trial-start markers rather than receiving
+    pre-segmented trials the way _load_eeg_from_mat does.
+
+    trial_to_stimulus : list[str | Path | None] | None
+        One entry per detected trial, giving the path to that trial's
+        stimulus audio file. There is no reliable way to decode stimulus
+        identity from this dataset's released EEG channels — the `music`/
+        `trialtype` channels documented as carrying a stimulus code are flat
+        at the ADC floor in the public release (confirmed empirically across
+        subjects/tasks), and the private "paradigm record" the original
+        analysis script reads instead isn't included. So the mapping must be
+        supplied by the caller (e.g. from config_daly.yaml's
+        `trial_to_stimulus`); a None entry (or trial_to_stimulus=None
+        entirely) is allowed and simply means no stimulus/envelope features
+        can be computed for that trial — it only becomes an error if
+        align_stimulus_and_idyom later needs an envelope for it.
+
+    Returns the eeg_data dict shape documented on _load_eeg_from_other_format,
+    plus a 'stimulus_paths' key (list parallel to 'trials').
+    """
+    events_path = filepath.parent / filepath.name.replace('_eeg.edf', '_events.tsv')
+    channels_path = filepath.parent / filepath.name.replace('_eeg.edf', '_channels.tsv')
+    events_df = pd.read_csv(events_path, sep='\t')
+    channels_df = pd.read_csv(channels_path, sep='\t')
+    eeg_channel_names_tsv = channels_df.loc[channels_df['type'] == 'EEG', 'name'].tolist()
+
+    raw = mne.io.read_raw_edf(filepath, preload=True, verbose='ERROR')
+    sf = int(raw.info['sfreq'])
+
+    # channels.tsv's declared names can differ in case from the actual EDF
+    # channel labels (e.g. this dataset's channels.tsv says 'FP1'/'FP2' but
+    # the EDF itself has 'Fp1'/'Fp2') -- resolve case-insensitively against
+    # raw.ch_names rather than assuming an exact string match.
+    edf_name_by_lower = {name.lower(): name for name in raw.ch_names}
+    eeg_channel_names = []
+    for tsv_name in eeg_channel_names_tsv:
+        edf_name = edf_name_by_lower.get(tsv_name.lower())
+        if edf_name is None:
+            raise KeyError(
+                f"{subject}: channel {tsv_name!r} from {channels_path.name} "
+                f"not found among the EDF's channels ({filepath.name})."
+            )
+        eeg_channel_names.append(edf_name)
+
+    onsets = events_df.loc[
+        events_df['trial_type'] == _DALY_TRIAL_START_MARKER, 'onset'].to_numpy()
+    if len(onsets) == 0:
+        raise ValueError(
+            f"{subject} {filepath.name}: no trial-start "
+            f"(trial_type == {_DALY_TRIAL_START_MARKER}) markers found in "
+            f"{events_path.name}."
+        )
+    # Some tasks double-fire this marker (rising+falling edge of the same
+    # trigger pulse); the original MATLAB pipeline for this dataset takes
+    # every other one (`trialInds(1:2:end)`) as the true trial onset. Detect
+    # doubling via a short median inter-onset gap rather than assuming it.
+    diffs = np.diff(onsets)
+    if len(diffs) and np.median(diffs) < 1.0:
+        onsets = onsets[0::2]
+
+    total_duration = raw.n_times / sf
+    trial_bounds = list(zip(onsets, list(onsets[1:]) + [total_duration]))
+
+    if trial_to_stimulus is not None and len(trial_to_stimulus) != len(trial_bounds):
+        raise ValueError(
+            f"{subject} {filepath.name}: trial_to_stimulus has "
+            f"{len(trial_to_stimulus)} entries but {len(trial_bounds)} trials "
+            "were detected from the events file."
+        )
+
+    eeg_full = raw.get_data(picks=eeg_channel_names).T  # (n_time, n_channels), volts
+    eeg_full = (1e6 * eeg_full).astype(np.float32)      # match the CND pipeline's microvolt convention
+
+    trials = [eeg_full[int(round(s * sf)):int(round(e * sf))] for s, e in trial_bounds]
+
+    montage_pos = mne.channels.make_standard_montage('standard_1020').get_positions()['ch_pos']
+    chanlocs = []
+    for name in eeg_channel_names:
+        pos = montage_pos.get(name)
+        if pos is None:
+            raise KeyError(
+                f"{subject}: channel {name!r} has no position in the "
+                "standard_1020 montage; add it manually if this dataset uses "
+                "a non-standard label for a known electrode."
+            )
+        # create_mne_raw_from_preprocessed reads positions back out as
+        # [ch.Y, ch.X, ch.Z] (matching the EEGLAB chanlocs convention the
+        # liberi loader's chanlocs use) — pre-swap X/Y here so that reswap
+        # yields this montage's true head-frame position unchanged.
+        chanlocs.append(SimpleNamespace(labels=name, X=pos[1], Y=pos[0], Z=pos[2]))
+
+    eeg_data = {
+        'trials': trials,
+        'fs': sf,
+        'chanlocs': chanlocs,
+        'pad_start': 0,
+        'stimulus_paths': (list(trial_to_stimulus) if trial_to_stimulus is not None
+                            else [None] * len(trials)),
+    }
+
+    print(f"✓ Loaded raw EEG ({subject}, {filepath.stem}): {len(trials)} trials, "
+          f"{len(eeg_channel_names)} channels @ {sf} Hz")
+
+    return eeg_data
 
 
 def preprocess_eeg_trials(eeg_data, target_fs, lpf_hz, hpf_hz, debug=False):
@@ -315,17 +464,42 @@ def make_surprisal_timeseries(midi_path, surprisal_vec, sfreq, n_times):
 # ── Shared stimulus / IDyOM library (same for every subject) ────────────────────
 
 class _StimulusLibrary:
-    """dataStim.mat + the IDyOM .mat files, parsed once and reused across
-    subjects (they are identical for everyone). This is a plain class now — the
-    old singleton machinery moved out to get_stimulus_library() (an lru_cache
-    factory), so sharing is explicit and injectable.
+    """Stimulus envelope (+ optionally IDyOM surprisal) source, parsed/primed
+    once and reused across subjects. Two source types, selected by
+    `source_type`:
 
-    All the config values it needs are passed in; it reads no module globals.
+      'mat' (default, the liberi/CNSP case) — dataStim.mat + the IDyOM .mat
+        files, identical for every subject. `raw_envelope(trial_idx)` indexes
+        the precomputed per-trial envelope array directly.
+
+      'audio_files' — for datasets that ship raw stimulus audio (.mp3/.wav)
+        with no precomputed envelope and no symbolic/MIDI surprisal source.
+        `raw_envelope(trial_idx, stimulus_path=...)` computes the envelope
+        from the given audio file on demand (compute_envelope_from_audio,
+        already resampled to `sfreq`) and caches it by path, since the same
+        stimulus can recur across trials/subjects. `surprisal_timeseries` is
+        not supported in this mode.
+
+    This is a plain class — the old singleton machinery moved out to
+    get_stimulus_library() (an lru_cache factory), so sharing is explicit and
+    injectable. All the config values it needs are passed in; it reads no
+    module globals.
     """
 
-    def __init__(self, eeg_dir, sfreq, pitch_surprisal_file, onset_surprisal_file,
-                 ic_clip, midi_dir):
+    def __init__(self, sfreq, source_type='mat', eeg_dir=None,
+                 pitch_surprisal_file=None, onset_surprisal_file=None,
+                 ic_clip=None, midi_dir=None):
         self.sfreq = sfreq
+        self.source_type = source_type
+
+        if source_type == 'audio_files':
+            self._envelope_cache = {}
+            return
+        if source_type != 'mat':
+            raise ValueError(
+                f"Unknown source_type {source_type!r}; expected 'mat' or "
+                "'audio_files'.")
+
         self.midi_dir = Path(midi_dir)
 
         stim_mat = loadmat(Path(eeg_dir) / "dataStim.mat",
@@ -363,12 +537,31 @@ class _StimulusLibrary:
         # not guaranteed to have the same n_times.
         self._surprisal_cache = {}
 
-    def raw_envelope(self, trial_idx):
+    def raw_envelope(self, trial_idx, stimulus_path=None):
+        if self.source_type == 'audio_files':
+            if stimulus_path is None:
+                raise ValueError(
+                    f"trial {trial_idx}: no stimulus file available for this "
+                    "trial (missing/null trial_to_stimulus entry). Fill in "
+                    "the real mapping in the dataset config before this "
+                    "trial can be used."
+                )
+            path = Path(stimulus_path)
+            if path not in self._envelope_cache:
+                self._envelope_cache[path] = compute_envelope_from_audio(path, self.sfreq)
+            return self._envelope_cache[path]
         return np.asarray(self.stim_feature[trial_idx], dtype=np.float64)
 
     def surprisal_timeseries(self, song_id, n_times):
         """The 4 surprisal/entropy arrays for `song_id`, placed onto a
-        length-`n_times` grid at self.sfreq. Cached per (song_id, n_times)."""
+        length-`n_times` grid at self.sfreq. Cached per (song_id, n_times).
+        Only available for source_type='mat'."""
+        if self.source_type != 'mat':
+            raise NotImplementedError(
+                "surprisal_timeseries requires source_type='mat' (IDyOM/MIDI "
+                "surprisal); a dataset with no symbolic score should leave "
+                "feature_keys.surprisal empty so this is never called."
+            )
         key = (song_id, n_times)
         if key not in self._surprisal_cache:
             midi_path = self.midi_dir / f"audio{song_id}.mid"
@@ -386,21 +579,29 @@ class _StimulusLibrary:
 
 
 @lru_cache(maxsize=None)
-def _get_stimulus_library_cached(eeg_dir, sfreq, pitch_file, onset_file, ic_clip, midi_dir):
+def _get_stimulus_library_cached(source_type, eeg_dir, sfreq, pitch_file, onset_file,
+                                  ic_clip, midi_dir):
     """lru_cache keyed on hashable (string paths + scalars), so one library is
     built per distinct set of these values and reused thereafter."""
+    if source_type == 'audio_files':
+        return _StimulusLibrary(sfreq=sfreq, source_type='audio_files')
     return _StimulusLibrary(
-        eeg_dir=Path(eeg_dir), sfreq=sfreq,
+        sfreq=sfreq, source_type='mat', eeg_dir=Path(eeg_dir),
         pitch_surprisal_file=Path(pitch_file), onset_surprisal_file=Path(onset_file),
         ic_clip=ic_clip, midi_dir=Path(midi_dir))
 
 
 def get_stimulus_library(config):
-    """Return a shared _StimulusLibrary for `config`, built once and cached
-    (keyed on the resolved path strings + sfreq + ic_clip). Multiple TRFDataset
-    instances across a subject loop automatically share one library."""
+    """Return a shared _StimulusLibrary for `config`, built once and cached.
+    Multiple TRFDataset instances across a subject loop automatically share
+    one library. Dispatches on config.stimulus_source_type ('mat', the
+    default, or 'audio_files')."""
+    source_type = getattr(config, 'stimulus_source_type', 'mat')
+    if source_type == 'audio_files':
+        return _get_stimulus_library_cached(
+            'audio_files', None, config.sfreq, None, None, None, None)
     return _get_stimulus_library_cached(
-        str(config.paths.eeg_dir), config.sfreq,
+        'mat', str(config.paths.eeg_dir), config.sfreq,
         str(config.paths.pitch_surprisal_file), str(config.paths.onset_surprisal_file),
         config.ic_clip, str(config.paths.midi_dir))
 
@@ -409,22 +610,33 @@ def get_stimulus_library(config):
 
 def align_stimulus_and_idyom(events, preprocessed_trials, lib, subject, sfreq,
                              trial_to_song_id_table, surprisal_feature_keys,
-                             debug=False):
+                             stimulus_paths=None, debug=False):
     """Resample the stimulus envelopes to `sfreq`, align each to its EEG trial
     length, derive onsets, and place the IDyOM surprisal/entropy features onto
     the same grid. Mutates `events` in place (adds 'envelope', 'onsets',
     'duration', 'eeg', and each surprisal feature) and returns it.
 
+    stimulus_paths : optional list parallel to the trials, giving each
+        trial's stimulus audio path — only needed for an 'audio_files'-mode
+        `lib` (see _StimulusLibrary), where trial_idx alone isn't enough to
+        find the right file; ignored by a 'mat'-mode `lib`.
+
     Standalone version of the former Dataset._align_stimulus_and_idyom method.
     """
     eeg_trial_lengths = [t.shape[0] for t in preprocessed_trials]
+    already_at_target_fs = getattr(lib, 'source_type', 'mat') == 'audio_files'
 
     envelopes = []
     for i in range(len(events['event'])):
-        env_raw = lib.raw_envelope(i)
+        stim_path = stimulus_paths[i] if stimulus_paths is not None else None
+        env_raw = lib.raw_envelope(i, stimulus_path=stim_path)
         n_eeg = eeg_trial_lengths[i]
 
-        env_resampled = resample_poly(env_raw, lib.stim_up, lib.stim_down)
+        # audio_files-mode envelopes are already resampled to `sfreq` inside
+        # compute_envelope_from_audio (each stimulus has its own native
+        # sample rate, so there's no single up/down ratio to apply here).
+        env_resampled = env_raw if already_at_target_fs else \
+            resample_poly(env_raw, lib.stim_up, lib.stim_down)
 
         # Trim to the shorter of stim/EEG, matching MATLAB's min(envLen, eegLen).
         # A ~1s mismatch is normal (the EEG recording overruns the audio
@@ -462,16 +674,21 @@ def align_stimulus_and_idyom(events, preprocessed_trials, lib, subject, sfreq,
     events['eeg'] = eelbrain.load.mne.variable_length_epochs(
         events, 0, tstop='duration', decim=1, adjacency='auto')
 
-    per_key_lists = {k: [] for k in surprisal_feature_keys}
-    for i, stimulus_id in enumerate(events['event']):
-        song_id = song_id_for_marker(stimulus_id, trial_to_song_id_table)
-        time = events['envelope'][i].time
-        n_times = time.nsamples
-        ts = lib.surprisal_timeseries(song_id, n_times)
+    # Skip entirely for datasets with no surprisal features (e.g. no symbolic
+    # score): song_id_for_marker below assumes a per-trial trial_to_song_id
+    # entry, which a dataset like ds002725 (single repeating marker code, no
+    # such table) doesn't have and doesn't need.
+    if surprisal_feature_keys:
+        per_key_lists = {k: [] for k in surprisal_feature_keys}
+        for i, stimulus_id in enumerate(events['event']):
+            song_id = song_id_for_marker(stimulus_id, trial_to_song_id_table)
+            time = events['envelope'][i].time
+            n_times = time.nsamples
+            ts = lib.surprisal_timeseries(song_id, n_times)
+            for k in surprisal_feature_keys:
+                per_key_lists[k].append(eelbrain.NDVar(ts[k], dims=(time,), name=k))
         for k in surprisal_feature_keys:
-            per_key_lists[k].append(eelbrain.NDVar(ts[k], dims=(time,), name=k))
-    for k in surprisal_feature_keys:
-        events[k] = per_key_lists[k]
+            events[k] = per_key_lists[k]
 
     return events
 

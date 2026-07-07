@@ -1,0 +1,153 @@
+# config_daly.yaml — dataset-specific config for ds002725 (Daly et al. 2019,
+# OpenNeuro, joint EEG-fMRI during affective music listening).
+#
+# Structural differences from config.yaml (liberi_dataset) this config
+# reflects:
+#   - EEG is continuous BIDS .edf (one file per subject x task), not
+#     pre-segmented CND .mat trials -- utils._load_eeg_from_edf segments
+#     trials from the *_events.tsv trial-start markers.
+#   - No precomputed envelope (no dataStim.mat equivalent) -- envelope is
+#     computed on the fly from the raw stimulus .mp3 files
+#     (stimulus_source_type: audio_files, see utils.compute_envelope_from_audio).
+#   - No symbolic/MIDI score -- IDyOM-style surprisal isn't possible here, so
+#     feature_keys.surprisal is empty and there is no acoustic_and_surprisal
+#     condition in practice (config.conditions still defines the key for
+#     interface parity with config.yaml, but it degenerates to == acoustic).
+#   - No musician/non-musician label -- subject_type is repurposed to hold
+#     sex (F/M) from participants.tsv.
+#   - First-pass scope is the classicalMusic task only (7 known stimuli,
+#     confirmed via participants.tsv it's the same across all 21 subjects);
+#     genMusic01-03/washout are not wired up yet.
+#
+# Relative paths here are resolved against the parent of experiments/ (the
+# TRF/ directory) inside config.py's _resolve_paths() -- do NOT put absolute
+# paths here.
+
+paths:
+  data_root: "../../datasets/neuro_dataset/datalad/ds002725-1.0.0"
+  wav_subdir: "stimuli/classical"
+  eeg_subdir: ""   # data_root itself: eeg_filename_pattern already includes sub-XX/eeg/...
+  save_dir_template: "pickles/encoding_daly_{date}"
+  # No midi_subdir / pitch_surprisal_file / onset_surprisal_file: this
+  # dataset has no symbolic score, so Paths leaves those as None (config.py
+  # only requires them when stimulus_source_type == 'mat').
+
+# Per-subject EEG filename, relative to the resolved eeg_dir (== data_root
+# here). `{subject}` is substituted with the BIDS subject id (e.g. 'sub-01').
+# Fixed to task-classicalMusic for this first pass.
+eeg_filename_pattern: "{subject}/eeg/{subject}_task-classicalMusic_eeg.edf"
+
+stimulus_source_type: audio_files
+
+subjects:
+  - sub-01
+  - sub-02
+  - sub-03
+  - sub-04
+  - sub-05
+  - sub-06
+  - sub-07
+  - sub-08
+  - sub-09
+  - sub-10
+  - sub-11
+  - sub-12
+  - sub-13
+  - sub-14
+  - sub-15
+  - sub-16
+  - sub-17
+  - sub-18
+  - sub-19
+  - sub-20
+  - sub-21
+
+# Repurposed to hold sex (F/M) from participants.tsv -- this dataset has no
+# musician/non-musician label like liberi_dataset's subject_type.
+subject_type:
+  sub-01: F
+  sub-02: F
+  sub-03: M
+  sub-04: M
+  sub-05: M
+  sub-06: M
+  sub-07: F
+  sub-08: F
+  sub-09: F
+  sub-10: M
+  sub-11: F
+  sub-12: F
+  sub-13: M
+  sub-14: F
+  sub-15: M
+  sub-16: M
+  sub-17: F
+  sub-18: F
+  sub-19: M
+  sub-20: M
+  sub-21: M
+
+# Not applicable (no symbolic score / surprisal features for this dataset).
+trial_to_song_id: {}
+
+# PLACEHOLDER, one list per subject, one entry per detected classicalMusic
+# trial: the filename (relative to wav_dir, i.e. stimuli/classical/) of the
+# stimulus played in that trial, or null if unknown/not music.
+#
+# Why this is empty: the `music`/`trialtype` EEG channels that are documented
+# (channels.tsv) to encode which stimulus played are flat at the ADC floor in
+# this BIDS release -- confirmed empirically across sub-01/sub-02/sub-05 by
+# reading the EDF header's digital/physical calibration and finding all
+# apparent variation is floating-point noise, not real signal. The private
+# "paradigm record" (`run*.mat`) the original MATLAB analysis reads instead
+# is not included in the public OpenNeuro release (confirmed: no such file
+# exists anywhere in the dataset). Per-subject trial order is also
+# randomized (durations at a given trial position don't match across
+# subjects), so there's no positional shortcut either.
+#
+# 12 trials/subject is confirmed only for sub-01/sub-02/sub-05 -- verify
+# for every subject before relying on this list's length. Fill in real
+# filenames once/if the true mapping becomes available (e.g. from the
+# paper's authors or supplementary code); utils._StimulusLibrary.raw_envelope
+# raises a clear, actionable error if a null entry is ever actually needed
+# rather than silently guessing.
+trial_to_stimulus:
+  sub-01: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-02: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-03: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-04: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-05: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-06: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-07: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-08: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-09: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-10: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-11: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-12: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-13: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-14: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-15: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-16: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-17: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-18: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-19: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-20: [null, null, null, null, null, null, null, null, null, null, null, null]
+  sub-21: [null, null, null, null, null, null, null, null, null, null, null, null]
+
+preprocessing:
+  low_frequency: 1     # Hz, HPF cutoff
+  high_frequency: 8    # Hz, LPF cutoff
+  sfreq: 64            # Hz, target sampling rate after preprocessing/resampling (matches config.yaml's convention)
+
+trf:
+  tmin: -0.1           # seconds, receptive-field start (pre-stimulus)
+  tmax: 0.600          # seconds, receptive-field end   (post-stimulus)
+  ic_clip: 15.0        # unused (no surprisal features for this dataset); kept for schema parity
+
+feature_keys:
+  acoustic: ["envelope", "onsets"]
+  surprisal: []        # no symbolic score -> no IDyOM-style surprisal for this dataset
+
+windowing:
+  window_samples: null
+  hop_samples: null

@@ -44,11 +44,13 @@ class Paths:
     base_dir: Path
     data_root: Path
     wav_dir: Path
-    midi_dir: Path
     eeg_dir: Path
-    pitch_surprisal_file: Path
-    onset_surprisal_file: Path
     save_dir: Path
+    # Only needed for source_type='mat' (IDyOM/MIDI surprisal, liberi_dataset);
+    # None for datasets with no symbolic score (see config.stimulus_source_type).
+    midi_dir: Optional[Path] = None
+    pitch_surprisal_file: Optional[Path] = None
+    onset_surprisal_file: Optional[Path] = None
 
 
 @dataclass
@@ -69,6 +71,14 @@ class Config:
     conditions: dict
     window_samples: Optional[int] = None
     hop_samples: Optional[int] = None
+    # 'mat' (default, liberi_dataset's precomputed dataStim.mat) or
+    # 'audio_files' (compute envelope on demand from raw stimulus audio) —
+    # selects the _StimulusLibrary source mode in utils.get_stimulus_library.
+    stimulus_source_type: str = 'mat'
+    # {subject: [stimulus_path_or_None, ...]}, one entry per trial — only used
+    # by non-'mat' EEG loaders that can't determine stimulus identity from the
+    # EEG file itself (see utils._load_eeg_from_edf).
+    trial_to_stimulus: dict = field(default_factory=dict)
 
     # Convenience alias so `config.save_dir` works like the old module constant.
     @property
@@ -90,11 +100,14 @@ def _resolve_paths(raw_paths, save_dir_override=None):
         base_dir=BASE_DIR,
         data_root=data_root,
         wav_dir=data_root / raw_paths["wav_subdir"],
-        midi_dir=data_root / raw_paths["midi_subdir"],
-        eeg_dir=data_root / raw_paths["eeg_subdir"],
-        pitch_surprisal_file=BASE_DIR / raw_paths["pitch_surprisal_file"],
-        onset_surprisal_file=BASE_DIR / raw_paths["onset_surprisal_file"],
+        eeg_dir=data_root / raw_paths.get("eeg_subdir", ""),
         save_dir=save_dir,
+        midi_dir=(data_root / raw_paths["midi_subdir"]
+                  if "midi_subdir" in raw_paths else None),
+        pitch_surprisal_file=(BASE_DIR / raw_paths["pitch_surprisal_file"]
+                               if "pitch_surprisal_file" in raw_paths else None),
+        onset_surprisal_file=(BASE_DIR / raw_paths["onset_surprisal_file"]
+                               if "onset_surprisal_file" in raw_paths else None),
     )
 
 
@@ -160,7 +173,17 @@ def load_config(path=None, cli_args=None):
 
     # trial_to_song_id keys must be ints (YAML usually parses them as ints
     # already, but coerce defensively so lookups by int(marker) never miss).
-    trial_to_song_id = {int(k): int(v) for k, v in raw["trial_to_song_id"].items()}
+    # Absent entirely for datasets with no per-trial song table (e.g. no
+    # symbolic score / surprisal features).
+    trial_to_song_id = {int(k): int(v) for k, v in raw.get("trial_to_song_id", {}).items()}
+
+    stimulus_source_type = raw.get("stimulus_source_type", "mat")
+    # {subject: [stimulus_path_or_None, ...]}: resolve each filename against
+    # wav_dir; a null YAML entry (unfilled placeholder) stays None.
+    trial_to_stimulus = {
+        subject: [None if fn is None else str(paths.wav_dir / fn) for fn in trials]
+        for subject, trials in raw.get("trial_to_stimulus", {}).items()
+    }
 
     return Config(
         paths=paths,
@@ -174,6 +197,8 @@ def load_config(path=None, cli_args=None):
         tmin=tmin,
         tmax=tmax,
         ic_clip=ic_clip,
+        stimulus_source_type=stimulus_source_type,
+        trial_to_stimulus=trial_to_stimulus,
         feature_keys_acoustic=feature_keys_acoustic,
         feature_keys_surprisal=feature_keys_surprisal,
         conditions=conditions,

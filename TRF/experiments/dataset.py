@@ -109,7 +109,8 @@ class PreparedSubject:
         #    'acoustic' and 'acoustic_and_surprisal' both derive from this.
         utils.align_stimulus_and_idyom(
             self.events, preprocessed_trials, self._lib, subject, config.sfreq,
-            config.trial_to_song_id, config.feature_keys_surprisal, debug=debug)
+            config.trial_to_song_id, config.feature_keys_surprisal,
+            stimulus_paths=eeg_data.get('stimulus_paths'), debug=debug)
         # 6. per-trial numpy assembly (all features, not yet z-scored)
         feature_names = config.feature_keys_acoustic + config.feature_keys_surprisal
         (self._trials_raw, self.sensor_dim,
