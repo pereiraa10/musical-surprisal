@@ -6,6 +6,7 @@ OLDcodeForPaper-IDyOMpy-/
 OLDcodeForPaper-IDyOMpy-/benchmark_results
 
 *.DS_Store
+*__pycache__
 TRF/__pycache__
 TRF/.venv
 TRF/liberi_dataset
