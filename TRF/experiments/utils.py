@@ -203,13 +203,15 @@ def _load_eeg_from_other_format(filepath, subject, trial_to_stimulus=None):
         }
     """
     suffix = filepath.suffix.lower()
+    if suffix == '.fif':
+        return _load_eeg_from_fif(filepath, subject, trial_to_stimulus)
     if suffix == '.edf':
         return _load_eeg_from_edf(filepath, subject, trial_to_stimulus)
     raise NotImplementedError(
         f"EEG loading for '{filepath.suffix}' files is not implemented "
-        f"(subject {subject}, path {filepath}). Only '.mat' and '.edf' are "
-        "supported today; extend _load_eeg_from_other_format to return the "
-        "documented eeg_data dict shape for this format."
+        f"(subject {subject}, path {filepath}). Only '.mat', '.edf', and "
+        "'.fif' are supported today; extend _load_eeg_from_other_format to "
+        "return the documented eeg_data dict shape for this format."
     )
 
 
@@ -323,6 +325,113 @@ def _load_eeg_from_edf(filepath, subject, trial_to_stimulus):
 
     print(f"✓ Loaded raw EEG ({subject}, {filepath.stem}): {len(trials)} trials, "
           f"{len(eeg_channel_names)} channels @ {sf} Hz")
+
+    return eeg_data
+
+
+# OpenMIIR (Stober et al. 2015) stim-channel trigger scheme:
+#   event_id = stimulus_id * 10 + condition
+# stimulus_id in {1,2,3,4,11,12,13,14,21,22,23,24} (the 12 song stimuli);
+# condition: 1=perception (real audio played to the participant), 2=cued
+# imagination, 3=uncued imagination, 4=noise burst. Only condition==1 events
+# have playable audio and are usable by this envelope-driven TRF pipeline —
+# the imagery/noise conditions have no stimulus to convolve against.
+_OPENMIIR_STIMULUS_IDS = {1, 2, 3, 4, 11, 12, 13, 14, 21, 22, 23, 24}
+_OPENMIIR_PERCEPTION_CONDITION = 1
+
+
+def _load_eeg_from_fif(filepath, subject, trial_to_stimulus):
+    """Load raw EEG from a continuous OpenMIIR .fif recording (one file per
+    subject), segmenting only the "perception" (condition==1) trials from the
+    STI 014 stim-channel trigger codes — see _OPENMIIR_STIMULUS_IDS above.
+
+    trial_to_stimulus : list[str | Path | None]
+        One entry per perception-condition trial (in trigger-latency order),
+        giving the path to that trial's stimulus audio file — required (not
+        optional) here, since each trial's segment length is derived from its
+        own stimulus file's duration (sf.info(...).duration) rather than a
+        separately-maintained metadata table, to stay consistent by
+        construction with the envelope that will later be computed from that
+        same file. A None entry raises immediately (segmentation is
+        impossible without a duration), unlike _load_eeg_from_edf's more
+        permissive contract.
+
+    Returns the eeg_data dict shape documented on _load_eeg_from_other_format,
+    plus a 'stimulus_paths' key (list parallel to 'trials').
+    """
+    raw = mne.io.read_raw_fif(filepath, preload=True, verbose='ERROR')
+    fs = int(raw.info['sfreq'])
+
+    events = mne.find_events(raw, stim_channel='STI 014', shortest_event=0, verbose='ERROR')
+    is_perception = np.array([
+        (code // 10) in _OPENMIIR_STIMULUS_IDS and (code % 10) == _OPENMIIR_PERCEPTION_CONDITION
+        for code in events[:, 2]
+    ])
+    perception_events = events[is_perception]
+    perception_events = perception_events[np.argsort(perception_events[:, 0])]
+
+    if len(perception_events) == 0:
+        raise ValueError(
+            f"{subject} {filepath.name}: no perception-condition (code % 10 == "
+            f"{_OPENMIIR_PERCEPTION_CONDITION}) trigger events found on STI 014."
+        )
+    if trial_to_stimulus is not None and len(trial_to_stimulus) != len(perception_events):
+        raise ValueError(
+            f"{subject} {filepath.name}: trial_to_stimulus has "
+            f"{len(trial_to_stimulus)} entries but {len(perception_events)} "
+            "perception-condition trigger events were detected."
+        )
+
+    # channels.tsv doesn't exist for this format; exclude the non-scalp
+    # channels directly by name (EXG1-EXG4 are EOG, EXG5/EXG6 are extra
+    # bipolar/reference inputs on the 66-channel subjects, STI 014 is the
+    # trigger channel) rather than relying on MNE's inferred channel types.
+    eeg_channel_names = [ch for ch in raw.ch_names
+                          if not ch.startswith('EXG') and ch != 'STI 014']
+
+    montage_pos = mne.channels.make_standard_montage('biosemi64').get_positions()['ch_pos']
+    montage_pos_by_lower = {name.lower(): pos for name, pos in montage_pos.items()}
+    chanlocs = []
+    for name in eeg_channel_names:
+        pos = montage_pos_by_lower.get(name.lower())
+        if pos is None:
+            raise KeyError(
+                f"{subject}: channel {name!r} has no position in the "
+                "biosemi64 montage; add it manually if this dataset uses a "
+                "non-standard label for a known electrode."
+            )
+        # create_mne_raw_from_preprocessed reads positions back out as
+        # [ch.Y, ch.X, ch.Z] — pre-swap X/Y here so that reswap yields this
+        # montage's true head-frame position unchanged (same convention as
+        # _load_eeg_from_edf).
+        chanlocs.append(SimpleNamespace(labels=name, X=pos[1], Y=pos[0], Z=pos[2]))
+
+    eeg_full = raw.get_data(picks=eeg_channel_names).T  # (n_time, n_channels), volts
+    eeg_full = (1e6 * eeg_full).astype(np.float32)      # match the CND pipeline's microvolt convention
+
+    trials = []
+    for i, (onset_sample, _, _code) in enumerate(perception_events):
+        stimulus_path = trial_to_stimulus[i]
+        if stimulus_path is None:
+            raise ValueError(
+                f"{subject}: trial_to_stimulus[{i}] is None; a stimulus file "
+                "is required to determine this perception trial's segment "
+                "length. Fill in the real mapping in the dataset config "
+                "before this trial can be loaded."
+            )
+        n_samples = int(round(sf.info(str(stimulus_path)).duration * fs))
+        trials.append(eeg_full[onset_sample:onset_sample + n_samples])
+
+    eeg_data = {
+        'trials': trials,
+        'fs': fs,
+        'chanlocs': chanlocs,
+        'pad_start': 0,
+        'stimulus_paths': list(trial_to_stimulus),
+    }
+
+    print(f"✓ Loaded raw EEG ({subject}, {filepath.stem}): {len(trials)} trials, "
+          f"{len(eeg_channel_names)} channels @ {fs} Hz")
 
     return eeg_data
 

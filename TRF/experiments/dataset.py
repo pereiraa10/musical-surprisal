@@ -128,7 +128,7 @@ class PreparedSubject:
         """
         return TRFDataset._from_prepared(self, condition, window_samples, hop_samples)
 
-
+# could also be all of the subjects
 class TRFDataset(TorchDataset):
     """One subject's preprocessed, feature-aligned, z-scored EEG + stimulus data
     for one condition, indexable at the window (or whole-trial) level.
@@ -173,7 +173,7 @@ class TRFDataset(TorchDataset):
     def _init_from_prepared(self, prepared, condition, window_samples, hop_samples):
         config = prepared.config
         self.subject = prepared.subject
-        self.condition = condition
+        self.condition = condition # features considered
         self.config = config
         self.feature_keys = config.conditions[condition]
 

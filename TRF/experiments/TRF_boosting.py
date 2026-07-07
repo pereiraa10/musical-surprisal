@@ -104,7 +104,8 @@ def main():
         # subject (PreparedSubject); each condition below only reruns the
         # cheap per-condition z-scoring step, not the full preprocessing.
         eeg_path = config.paths.eeg_dir / config.eeg_filename_pattern.format(subject=SUBJECT)
-        eeg_data = utils.load_subject_raw_eeg(eeg_path, SUBJECT)
+        eeg_data = utils.load_subject_raw_eeg(
+            eeg_path, SUBJECT, config.trial_to_stimulus.get(SUBJECT))
         prepared = PreparedSubject(SUBJECT, eeg_data, config, debug=DEBUG)
 
         for condition, feature_keys in config.conditions.items():
