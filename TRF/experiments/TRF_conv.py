@@ -74,9 +74,6 @@ BATCH_SIZE     = 64           # windows per gradient step
 WINDOW_SAMPLES = int(WINDOW_SEC * SFREQ)
 HOP_SAMPLES    = int(HOP_SEC   * SFREQ)
 
-# ── Alignment plot channel ──
-CHANNEL_IDX = 0               # EEG channel used in the alignment figure
-
 # Receptive field in taps, derived exactly like build_lag_matrix in the ridge code
 N_LAGS  = int(round((TMAX - TMIN) * SFREQ)) + 1
 LAG_MIN = int(round(TMIN * SFREQ))
@@ -430,47 +427,6 @@ def plot_learning_curves(lc_stats, subject, condition, variant, save_dir):
         print(f"  Saved learning curves -> {fname}")
 
 
-def plot_alignment(Y_true, Y_pred, subject, condition, variant, save_dir,
-                   channel_idx=CHANNEL_IDX, sfreq=SFREQ):
-    r_vals = np.array([pearsonr(Y_true[:, c], Y_pred[:, c])[0]
-                       for c in range(Y_true.shape[1])])
-    ch = channel_idx if channel_idx < Y_true.shape[1] else 0
-    n_plot = min(len(Y_true), int(10 * sfreq))
-    t_plot = np.arange(n_plot) / sfreq
-
-    fig, axes = plt.subplots(2, 1, figsize=(14, 7), sharex=True)
-    fig.suptitle(
-        f'Predicted vs Actual EEG  |  {subject}, channel {ch}\n'
-        f'CNN TRF (windowed)  ·  {condition}  ·  r = {r_vals[ch]:.3f}',
-        fontsize=12, fontweight='bold')
-
-    axes[0].plot(t_plot, Y_true[:n_plot, ch],
-                 color='black', lw=0.7, label='Actual EEG (z-scored)')
-    axes[0].plot(t_plot, Y_pred[:n_plot, ch],
-                 color='seagreen', lw=0.9, alpha=0.85,
-                 label=f'Predicted EEG  (r = {r_vals[ch]:.3f})')
-    axes[0].set_ylabel('z-score')
-    axes[0].set_title('Actual vs Predicted EEG  (CNN TRF windowed)')
-    axes[0].legend(fontsize=9)
-    axes[0].grid(True, alpha=0.3)
-
-    axes[1].plot(t_plot, Y_true[:n_plot, ch] - Y_pred[:n_plot, ch],
-                 color='darkorange', lw=0.7, label='Residual (actual - predicted)')
-    axes[1].axhline(0, color='black', lw=0.6, linestyle='--')
-    axes[1].set_ylabel('z-score')
-    axes[1].set_xlabel('Time (s)')
-    axes[1].set_title('Residual: Actual - Predicted')
-    axes[1].legend(fontsize=9)
-    axes[1].grid(True, alpha=0.3)
-
-    plt.tight_layout()
-    fname = save_dir / f"{subject}_{condition}_{variant}_windowed_alignment_ch{ch}.png"
-    plt.savefig(fname, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    if DEBUG:
-        print(f"  Saved alignment plot -> {fname}")
-
-
 def average_kernel(kernels):
     """Average per-fold kernels; None if the variant has none (or any fold failed)."""
     if any(k is None for k in kernels):
@@ -536,7 +492,6 @@ def main():
             res.save_result(path, result)
 
             plot_learning_curves(lc_stats, SUBJECT, condition, MODEL_VARIANT, save_dir)
-            plot_alignment(Y_true, Y_pred, SUBJECT, condition, MODEL_VARIANT, save_dir)
 
             print(f"  {SUBJECT} | {condition}: conv2_windowed ({MODEL_VARIANT}) "
                   f"mean r = {result['r_per_channel'].mean():.4f}")

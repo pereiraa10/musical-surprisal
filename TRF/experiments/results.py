@@ -50,6 +50,13 @@ from datetime import date
 import numpy as np
 from scipy.stats import pearsonr
 
+import matplotlib
+matplotlib.use('Agg')   # non-interactive backend; safe on headless machines
+import matplotlib.pyplot as plt
+
+DEFAULT_SFREQ = 64
+DEFAULT_CHANNEL_IDX = 0
+
 
 def result_filename(save_dir, subject, model_family, condition, variant=None):
     model_tag = model_family if variant is None else f'{model_family}_{variant}'
@@ -162,7 +169,59 @@ def build_result(*, subject, subject_type, condition, feature_keys, model_family
     }
 
 
-def save_result(path, result):
+def plot_alignment(result, save_dir, channel_idx=DEFAULT_CHANNEL_IDX, sfreq=DEFAULT_SFREQ):
+    """Predicted-vs-actual EEG alignment plot, built entirely from a `result`
+    dict (see build_result). Skipped when the result has no Y_true/Y_pred
+    (the eelbrain.boosting exception, see build_result's docstring)."""
+    Y_true, Y_pred = result['Y_true'], result['Y_pred']
+    if Y_true is None or Y_pred is None:
+        return
+
+    meta = result['meta']
+    subject, condition = meta['subject'], meta['condition']
+    model_tag = meta['model_family']
+    if meta.get('model_variant'):
+        model_tag = f"{model_tag}_{meta['model_variant']}"
+
+    r_vals = result['r_per_channel']
+    ch = channel_idx if channel_idx < Y_true.shape[1] else 0
+    n_plot = min(len(Y_true), int(10 * sfreq))
+    t_plot = np.arange(n_plot) / sfreq
+
+    fig, axes = plt.subplots(2, 1, figsize=(14, 7), sharex=True)
+    fig.suptitle(
+        f'Predicted vs Actual EEG  |  {subject}, channel {ch}\n'
+        f'{model_tag}  ·  {condition}  ·  r = {r_vals[ch]:.3f}',
+        fontsize=12, fontweight='bold')
+
+    axes[0].plot(t_plot, Y_true[:n_plot, ch],
+                 color='black', lw=0.7, label='Actual EEG (z-scored)')
+    axes[0].plot(t_plot, Y_pred[:n_plot, ch],
+                 color='seagreen', lw=0.9, alpha=0.85,
+                 label=f'Predicted EEG  (r = {r_vals[ch]:.3f})')
+    axes[0].set_ylabel('z-score')
+    axes[0].set_title(f'Actual vs Predicted EEG  ({model_tag})')
+    axes[0].legend(fontsize=9)
+    axes[0].grid(True, alpha=0.3)
+
+    axes[1].plot(t_plot, Y_true[:n_plot, ch] - Y_pred[:n_plot, ch],
+                 color='darkorange', lw=0.7, label='Residual (actual - predicted)')
+    axes[1].axhline(0, color='black', lw=0.6, linestyle='--')
+    axes[1].set_ylabel('z-score')
+    axes[1].set_xlabel('Time (s)')
+    axes[1].set_title('Residual: Actual - Predicted')
+    axes[1].legend(fontsize=9)
+    axes[1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    fname = save_dir / f"{subject}_{condition}_{model_tag}_alignment_ch{ch}.png"
+    plt.savefig(fname, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    return fname
+
+
+def save_result(path, result, channel_idx=DEFAULT_CHANNEL_IDX, sfreq=DEFAULT_SFREQ):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'wb') as f:
         pickle.dump(result, f)
+    plot_alignment(result, path.parent, channel_idx=channel_idx, sfreq=sfreq)
