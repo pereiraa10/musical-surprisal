@@ -17,8 +17,9 @@
 #     (EOG/extra reference inputs) and STI 014 are excluded from the picked
 #     channel list.
 #   - No precomputed envelope and no symbolic/MIDI score -- like Daly,
-#     stimulus_source_type: audio_files, feature_keys.surprisal is empty, and
-#     trial_to_song_id is unused ({}).
+#     stimulus_source_type: audio_files, feature_sets.acoustic_and_surprisal is
+#     defined identically to feature_sets.acoustic (no real surprisal features
+#     for this dataset), and trial_to_song_id is unused ({}).
 #   - Every raw recording actually contains 4 interleaved trial *conditions*
 #     per song per repetition (perception / cued imagination / uncued
 #     imagination / noise burst), decoded from the stim-channel trigger code
@@ -144,9 +145,13 @@ trf:
   tmax: 0.600          # seconds, receptive-field end   (post-stimulus)
   ic_clip: 15.0         # unused (no surprisal features for this dataset); kept for schema parity
 
-feature_keys:
+feature_sets:
   acoustic: ["envelope", "onsets"]
-  surprisal: []        # no symbolic score -> no IDyOM-style surprisal for this dataset
+  acoustic_and_surprisal: ["envelope", "onsets"]   # no symbolic score -> no IDyOM-style surprisal for this dataset; degenerates to == acoustic
+
+feature_set_labels:
+  acoustic: "Acoustic\n(envelope)"
+  acoustic_and_surprisal: "Full\n(+ onsets + surprisal + entropy)"
 
 windowing:
   window_samples: null

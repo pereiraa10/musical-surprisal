@@ -29,17 +29,35 @@ array (verified against the installed eelbrain source: no y_pred attribute).
 Its own `r` is computed, per partition, using the TRF fit on that partition's
 *training* folds — a different h per partition, which isn't retained unless
 `partition_results=True` is passed to boosting() (not done here, to keep
-runtime down across 19 subjects x 2 conditions).
+runtime down across 19 subjects x 2 feature_sets).
 
 Instead, Y_pred/Y_true here are reconstructed post-hoc with eelbrain.convolve()
-using the single final averaged TRF (`trf_cv.h`), applied per-trial. Per the
-BoostingResult docstring, this is exactly the h * x operation boosting itself
-uses to generate predictions, just with the across-all-partitions average h
-rather than each partition's own training h. This makes `r_per_channel` in the
+using the single final averaged TRF, applied per-trial. Per the BoostingResult
+docstring, this is exactly the h * x operation boosting itself uses to
+generate predictions, just with the across-all-partitions average h rather
+than each partition's own training h. This makes `r_per_channel` in the
 pickle authoritative (it's `trf_cv.r`, straight from eelbrain) while
 `per_trial_r`/`Y_pred`/`Y_true` are a close, clearly-labeled approximation
 useful for alignment plots and per-trial breakdowns — not a re-derivation of
 `r_per_channel`.
+
+boosting() is called with its default `scale_data=True`, so `trf_cv.h` is fit
+in *internally normalized* units — it expects normalized x and produces
+normalized y (this is a *global* normalization computed by eelbrain across
+all cases, not the per-trial z-scoring used elsewhere in this codebase, but
+close enough in scale for this purpose). `eelbrain.convolve()` is a plain
+kernel convolution with no awareness of scaling, so `trf_cv.h` must be paired
+with x in roughly matching (normalized) units: `ds.trials[i][k]` (the
+per-trial z-scored features/EEG already used by TRF_ridge_3.py/TRF_conv_1.py,
+via utils.zscore_trials) puts both Y_pred and Y_true in per-trial z-scored
+units, matching the ridge/conv convention and the 'Actual EEG (z-scored)'
+label in results.plot_alignment. Note `trf_cv.h_scaled` (eelbrain's
+`h * y_scale/x_scale` rescaling) is deliberately NOT used here — it rescales
+`h` to match *raw*, unnormalized x, which is the wrong pairing for the
+z-scored x used below (verified empirically: convolving h_scaled against
+z-scored x collapses Y_pred to ~1e-7, while h against z-scored x gives a
+sensibly-scaled, weakly-correlated signal consistent with boosting's own
+(low) r).
 """
 
 import os
@@ -62,13 +80,24 @@ ERROR = 'l1'
 def reconstruct_predictions(ds, trf_cv, feature_keys):
     """Per-trial predicted EEG via eelbrain.convolve(trf_cv.h, x), using the
     final averaged TRF (not the per-partition training TRF boosting used
-    internally — see module docstring)."""
+    internally — see module docstring). Both x and Y_true are drawn from
+    ds.trials, which is already per-trial z-scored exactly like ridge/conv
+    (utils.zscore_trials), so Y_pred and Y_true end up in the same units as
+    the plot's 'Actual EEG (z-scored)' label assumes. trf_cv.h (not
+    h_scaled) is used because it is fit against boosting's own internally
+    normalized x/y — see module docstring for why h_scaled is the wrong
+    pairing here."""
+    h = trf_cv.h
+    h_list = h if isinstance(h, (list, tuple)) else [h]
+
     Y_pred_trials, Y_true_trials = [], []
-    for i in range(len(ds.events['event'])):
-        x = [ds.events[k][i] for k in feature_keys]
-        y_pred = eelbrain.convolve(trf_cv.h, x)
+    for t in ds.trials:
+        n_time = t['eeg'].shape[0]
+        time_axis = eelbrain.UTS(0, 1 / ds.config.sfreq, n_time)
+        x = [eelbrain.NDVar(t[k], (time_axis,), name=k) for k in feature_keys]
+        y_pred = eelbrain.convolve(h_list, x)
         Y_pred_trials.append(y_pred.get_data(('sensor', 'time')).T)
-        Y_true_trials.append(ds.events['eeg'][i].get_data(('sensor', 'time')).T)
+        Y_true_trials.append(t['eeg'])
 
     trial_boundaries = []
     offset = 0
@@ -100,16 +129,16 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
 
     for SUBJECT in config.subjects:
-        # Load raw EEG + run the condition-independent pipeline once per
-        # subject (PreparedSubject); each condition below only reruns the
-        # cheap per-condition z-scoring step, not the full preprocessing.
+        # Load raw EEG + run the feature_set-independent pipeline once per
+        # subject (PreparedSubject); each feature_set below only reruns the
+        # cheap per-feature_set z-scoring step, not the full preprocessing.
         eeg_path = config.paths.eeg_dir / config.eeg_filename_pattern.format(subject=SUBJECT)
         eeg_data = utils.load_subject_raw_eeg(
             eeg_path, SUBJECT, config.trial_to_stimulus.get(SUBJECT))
         prepared = PreparedSubject(SUBJECT, eeg_data, config, debug=DEBUG)
 
-        for condition, feature_keys in config.conditions.items():
-            ds = prepared.to_dataset(condition, window_samples=None)
+        for feature_set, feature_keys in config.feature_sets.items():
+            ds = prepared.to_dataset(feature_set, window_samples=None)
             trf_cv = eelbrain.boosting(
                 'eeg', feature_keys, config.tmin, config.tmax, data=ds.events,
                 basis=BASIS, partitions=PARTITIONS, test=True, error=ERROR)
@@ -121,19 +150,19 @@ def main():
                 Y_pred, Y_true, trial_boundaries = reconstruct_predictions(
                     ds, trf_cv, feature_keys)
             except Exception as exc:
-                print(f"  [warn] {SUBJECT} | {condition}: could not reconstruct "
+                print(f"  [warn] {SUBJECT} | {feature_set}: could not reconstruct "
                       f"per-trial predictions ({exc}); saving without Y_pred/Y_true.")
                 Y_pred = Y_true = trial_boundaries = None
 
             try:
                 weights = extract_weights(trf_cv, feature_keys)
             except Exception as exc:
-                print(f"  [warn] {SUBJECT} | {condition}: could not extract "
+                print(f"  [warn] {SUBJECT} | {feature_set}: could not extract "
                       f"TRF weights ({exc}); saving weights=None.")
                 weights = None
 
             result = res.build_result(
-                subject=SUBJECT, subject_type=ds.subject_type, condition=condition,
+                subject=SUBJECT, subject_type=ds.subject_type, feature_set=feature_set,
                 feature_keys=feature_keys, model_family='boosting',
                 channel_names=ds.channel_names, Y_true=Y_true, Y_pred=Y_pred,
                 trial_boundaries=trial_boundaries, r_per_channel=r_per_channel,
@@ -143,16 +172,17 @@ def main():
                     'basis': BASIS, 'partitions': PARTITIONS, 'error': ERROR,
                     'note': (
                         'Y_pred/Y_true reconstructed post-hoc via eelbrain.convolve '
-                        'with the final averaged TRF; NOT the same per-partition '
-                        'prediction boosting used internally for r_per_channel. '
-                        'See EVALUATION_NOTES.md.'
+                        'with the final averaged TRF; NOT the same '
+                        'per-partition prediction boosting used internally for '
+                        'r_per_channel. Both are in per-trial z-scored units, '
+                        'matching TRF_ridge_3.py/TRF_conv_1.py. See EVALUATION_NOTES.md.'
                     ),
                 },
             )
-            path = res.result_filename(save_dir, SUBJECT, 'boosting', condition)
+            path = res.result_filename(save_dir, SUBJECT, 'boosting', feature_set)
             res.save_result(path, result)
 
-            print(f"  {SUBJECT} | {condition}: boosting mean r = {r_per_channel.mean():.4f}"
+            print(f"  {SUBJECT} | {feature_set}: boosting mean r = {r_per_channel.mean():.4f}"
                   f"  (rank r = {r_rank_per_channel.mean():.4f})")
 
 

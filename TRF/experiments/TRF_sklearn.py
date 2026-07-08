@@ -6,8 +6,8 @@ Same algorithm as ../TRF_sklearn.py: alpha is selected via trial-based LOOCV
 on an explicit Toeplitz lag matrix (built here, not by a library). Data
 loading/preprocessing/alignment/z-scoring now come from dataset.PreparedSubject
 + dataset.TRFDataset instead of being duplicated inline. PreparedSubject runs
-the condition-independent pipeline once per subject; both conditions below
-reuse it via .to_dataset(condition, ...).
+the feature_set-independent pipeline once per subject; both feature_sets below
+reuse it via .to_dataset(feature_set, ...).
 
 Alpha values selected here are NOT comparable to TRF_mne.py's — the two
 implementations construct/scale their lag matrices differently. See
@@ -138,16 +138,16 @@ def main():
     n_lags = int(round((config.tmax - config.tmin) * config.sfreq)) + 1
 
     for SUBJECT in config.subjects:
-        # Load raw EEG + run the condition-independent pipeline once per
-        # subject (PreparedSubject); each condition below only reruns the
-        # cheap per-condition z-scoring step, not the full preprocessing.
+        # Load raw EEG + run the feature_set-independent pipeline once per
+        # subject (PreparedSubject); each feature_set below only reruns the
+        # cheap per-feature_set z-scoring step, not the full preprocessing.
         eeg_path = config.paths.eeg_dir / config.eeg_filename_pattern.format(subject=SUBJECT)
         eeg_data = utils.load_subject_raw_eeg(
             eeg_path, SUBJECT, config.trial_to_stimulus.get(SUBJECT))
         prepared = PreparedSubject(SUBJECT, eeg_data, config, debug=DEBUG)
 
-        for condition, feature_keys in config.conditions.items():
-            ds = prepared.to_dataset(condition, window_samples=None)
+        for feature_set, feature_keys in config.feature_sets.items():
+            ds = prepared.to_dataset(feature_set, window_samples=None)
             trials = ds.trials
             Phi_all = [
                 build_design_matrix({k: t[k] for k in feature_keys},
@@ -157,23 +157,23 @@ def main():
             Y_all = [t['eeg'] for t in trials]
 
             best_alpha, best_r, alpha_r = select_alpha_loocv(Phi_all, Y_all, RIDGE_ALPHAS)
-            print(f"  {SUBJECT} | {condition} [sklearn]: "
+            print(f"  {SUBJECT} | {feature_set} [sklearn]: "
                   f"selected alpha = {best_alpha:.2e}  (mean CV r = {best_r:.4f})")
 
             Y_pred, Y_true, coefs, trial_boundaries = loocv_ridge(Phi_all, Y_all, best_alpha)
             weights = average_weights(coefs, len(feature_keys), n_lags)
 
             result = res.build_result(
-                subject=SUBJECT, subject_type=ds.subject_type, condition=condition,
+                subject=SUBJECT, subject_type=ds.subject_type, feature_set=feature_set,
                 feature_keys=feature_keys, model_family='sklearn_ridge',
                 channel_names=ds.channel_names, Y_true=Y_true, Y_pred=Y_pred,
                 trial_boundaries=trial_boundaries, best_alpha=float(best_alpha),
                 alpha_selection=alpha_r, weights=weights,
             )
-            path = res.result_filename(save_dir, SUBJECT, 'sklearn_ridge', condition)
+            path = res.result_filename(save_dir, SUBJECT, 'sklearn_ridge', feature_set)
             res.save_result(path, result)
 
-            print(f"  {SUBJECT} | {condition}: sklearn Ridge mean r = "
+            print(f"  {SUBJECT} | {feature_set}: sklearn Ridge mean r = "
                   f"{result['r_per_channel'].mean():.4f}")
 
 

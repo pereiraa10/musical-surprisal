@@ -10,9 +10,11 @@
 #     computed on the fly from the raw stimulus .mp3 files
 #     (stimulus_source_type: audio_files, see utils.compute_envelope_from_audio).
 #   - No symbolic/MIDI score -- IDyOM-style surprisal isn't possible here, so
-#     feature_keys.surprisal is empty and there is no acoustic_and_surprisal
-#     condition in practice (config.conditions still defines the key for
-#     interface parity with config.yaml, but it degenerates to == acoustic).
+#     there's no real acoustic_and_surprisal feature_set for this dataset;
+#     feature_sets.acoustic_and_surprisal is defined identically to
+#     feature_sets.acoustic below (interface parity with config.yaml, which
+#     has real surprisal features), so the comparison in compare_models.py
+#     degenerates to acoustic-vs-itself rather than being absent entirely.
 #   - No musician/non-musician label -- subject_type is repurposed to hold
 #     sex (F/M) from participants.tsv.
 #   - First-pass scope is the classicalMusic task only (7 known stimuli,
@@ -165,9 +167,9 @@ trf:
   tmax: 0.600          # seconds, receptive-field end   (post-stimulus)
   ic_clip: 15.0        # unused (no surprisal features for this dataset); kept for schema parity
 
-feature_keys:
+feature_sets:
   acoustic: ["envelope", "onsets"]
-  surprisal: []        # no symbolic score -> no IDyOM-style surprisal for this dataset
+  acoustic_and_surprisal: ["envelope", "onsets"]   # no symbolic score -> no IDyOM-style surprisal for this dataset; degenerates to == acoustic
 
 windowing:
   window_samples: null

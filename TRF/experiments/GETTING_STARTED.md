@@ -94,6 +94,48 @@ cp experiments/config.yaml experiments/config_lofi.yaml
 python experiments/TRF_sklearn.py --config experiments/config_lofi.yaml
 ```
 
+#### Running on OpenMIIR (`config_openmiir.yaml`)
+
+`config_openmiir.yaml` configures the OpenMIIR music-imagery dataset: `.fif` EEG
+(loaded via `utils._load_eeg_from_fif`), envelope computed on demand from
+`audio/full.v{1,2}/*.wav` (`stimulus_source_type: audio_files`, no precomputed
+`dataStim.mat`), and only the 60 "perception condition" trials per subject, across
+the 10 subjects with local `.fif` files (P01, P04, P05, P06, P07, P09, P11, P12,
+P13, P14). Intended usage is the same `--config` pattern as any other dataset:
+
+```bash
+cd musical-surprisal/TRF
+python experiments/TRF_sklearn.py --config experiments/config_openmiir.yaml
+python experiments/run_all_models.py --config experiments/config_openmiir.yaml
+```
+
+**⚠️ Not actually wired up yet — do not run the above until this is fixed.**
+None of the 4 model scripts pass `trial_to_stimulus` when calling
+`utils.load_subject_raw_eeg`:
+
+```python
+eeg_data = utils.load_subject_raw_eeg(eeg_path, SUBJECT)   # trial_to_stimulus defaults to None
+```
+
+This is harmless for `config.yaml`'s `.mat`-format liberi_dataset
+(`_load_eeg_from_mat` ignores the argument entirely), but any
+`stimulus_source_type: audio_files` dataset needs it — **this means
+`config_daly.yaml` has the same gap, not just `config_openmiir.yaml`**.
+`_load_eeg_from_fif` indexes `trial_to_stimulus[i]` directly and will raise
+`TypeError: 'NoneType' object is not subscriptable`; `_load_eeg_from_edf` treats
+`None` as "no stimulus for this trial" and will silently produce envelope-less
+trials instead of erroring, which is worse. Fixing this means changing each
+script's EEG-load call to pass the subject's stimulus list, e.g.:
+
+```python
+eeg_data = utils.load_subject_raw_eeg(
+    eeg_path, SUBJECT, config.trial_to_stimulus.get(SUBJECT))
+```
+
+at the 4 call sites: `TRF_sklearn.py:145`, `TRF_mne.py:120`,
+`TRF_boosting.py:107`, `TRF_conv.py:459`. Not yet done — plan this change before
+running any model script against `config_openmiir.yaml` (or `config_daly.yaml`).
+
 ### 4. Programmatic override (Python shell / notebook / one-off script)
 
 `load_config()` returns a plain `Config` dataclass — mutate it directly. How you inject

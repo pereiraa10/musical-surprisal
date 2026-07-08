@@ -5,8 +5,8 @@ Windowed mini-batch conv TRF. Same model/training code as the original
 ../TRF_conv_2_windowed.py — the only structural change is that data loading,
 preprocessing, alignment, and z-scoring now come from dataset.PreparedSubject +
 dataset.TRFDataset instead of ~150 lines duplicated from TRF_sklearn.py /
-TRF_mne.py inline. PreparedSubject runs the condition-independent pipeline
-once per subject; both conditions below reuse it via .to_dataset(condition, ...).
+TRF_mne.py inline. PreparedSubject runs the feature_set-independent pipeline
+once per subject; both feature_sets below reuse it via .to_dataset(feature_set, ...).
 
 Two additions beyond the port:
   - `extract_kernel()` pulls the literal TRF kernel out of 'linear'/'separable'
@@ -380,11 +380,11 @@ def loocv_conv(ds, n_features, n_channels):
 # Plots
 # ════════════════════════════════════════════════════════════════════════════════
 
-def plot_learning_curves(lc_stats, subject, condition, variant, save_dir):
+def plot_learning_curves(lc_stats, subject, feature_set, variant, save_dir):
     epochs = np.arange(1, lc_stats.n_epochs + 1)
     fig, axes = plt.subplots(2, 1, figsize=(9, 7), sharex=True)
     fig.suptitle(
-        f"Learning curves — {subject} | {condition} | {variant} (windowed)",
+        f"Learning curves — {subject} | {feature_set} | {variant} (windowed)",
         fontsize=11, fontweight='bold')
 
     ax = axes[0]
@@ -420,7 +420,7 @@ def plot_learning_curves(lc_stats, subject, condition, variant, save_dir):
     ax.spines['right'].set_visible(False)
 
     plt.tight_layout()
-    fname = save_dir / f"{subject}_{condition}_{variant}_windowed_learning_curves.png"
+    fname = save_dir / f"{subject}_{feature_set}_{variant}_windowed_learning_curves.png"
     plt.savefig(fname, dpi=150, bbox_inches='tight')
     plt.close(fig)
     if DEBUG:
@@ -452,20 +452,20 @@ def main():
     }
 
     for SUBJECT in config.subjects:
-        # Load raw EEG + run the condition-independent pipeline once per
-        # subject (PreparedSubject); each condition below only reruns the
-        # cheap per-condition z-scoring step, not the full preprocessing.
+        # Load raw EEG + run the feature_set-independent pipeline once per
+        # subject (PreparedSubject); each feature_set below only reruns the
+        # cheap per-feature_set z-scoring step, not the full preprocessing.
         eeg_path = config.paths.eeg_dir / config.eeg_filename_pattern.format(subject=SUBJECT)
         eeg_data = utils.load_subject_raw_eeg(
             eeg_path, SUBJECT, config.trial_to_stimulus.get(SUBJECT))
         prepared = PreparedSubject(SUBJECT, eeg_data, config, debug=DEBUG)
 
-        for condition, feature_keys in config.conditions.items():
-            ds = prepared.to_dataset(condition, window_samples=WINDOW_SAMPLES,
+        for feature_set, feature_keys in config.feature_sets.items():
+            ds = prepared.to_dataset(feature_set, window_samples=WINDOW_SAMPLES,
                                      hop_samples=HOP_SAMPLES)
             n_features = len(feature_keys)
 
-            print(f"\n  {SUBJECT} | {condition} | variant={MODEL_VARIANT} (windowed) "
+            print(f"\n  {SUBJECT} | {feature_set} | variant={MODEL_VARIANT} (windowed) "
                   f"| features={n_features} channels={ds.n_channels} "
                   f"| window={WINDOW_SAMPLES}smp hop={HOP_SAMPLES}smp batch={BATCH_SIZE}")
 
@@ -481,7 +481,7 @@ def main():
             }
 
             result = res.build_result(
-                subject=SUBJECT, subject_type=ds.subject_type, condition=condition,
+                subject=SUBJECT, subject_type=ds.subject_type, feature_set=feature_set,
                 feature_keys=feature_keys, model_family='conv',
                 model_variant=MODEL_VARIANT, channel_names=ds.channel_names,
                 Y_true=Y_true, Y_pred=Y_pred, trial_boundaries=trial_boundaries,
@@ -489,12 +489,12 @@ def main():
                 extra_meta={'hyperparams': hyperparams},
             )
             path = res.result_filename(
-                save_dir, SUBJECT, 'conv', condition, variant=MODEL_VARIANT)
+                save_dir, SUBJECT, 'conv', feature_set, variant=MODEL_VARIANT)
             res.save_result(path, result)
 
-            plot_learning_curves(lc_stats, SUBJECT, condition, MODEL_VARIANT, save_dir)
+            plot_learning_curves(lc_stats, SUBJECT, feature_set, MODEL_VARIANT, save_dir)
 
-            print(f"  {SUBJECT} | {condition}: conv2_windowed ({MODEL_VARIANT}) "
+            print(f"  {SUBJECT} | {feature_set}: conv2_windowed ({MODEL_VARIANT}) "
                   f"mean r = {result['r_per_channel'].mean():.4f}")
 
 

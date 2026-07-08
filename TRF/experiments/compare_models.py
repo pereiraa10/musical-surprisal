@@ -11,7 +11,7 @@ torch/mne/eelbrain.
 Only 'meta' and 'r_per_channel' are kept from each pickle; Y_pred/Y_true/
 weights/training_history are dropped immediately after loading. Each pickle
 is ~150MB (see results.py's docstring), so holding all of them at once for a
-full run (19 subjects x 2 conditions x 4 models) would be 20GB+ — this keeps
+full run (19 subjects x 2 feature_sets x 4 models) would be 20GB+ — this keeps
 peak memory to ~1 file at a time.
 
 Usage
@@ -34,23 +34,41 @@ from statsmodels.stats.multitest import fdrcorrection
 
 from config import load_config
 
-CONDITIONS = ('acoustic', 'acoustic_and_surprisal')
-CONDITION_LABELS = {
-    'acoustic': 'Acoustic\n(envelope)',
-    'acoustic_and_surprisal': 'Full\n(+ onsets + surprisal + entropy)',
-}
+
+def _resolve_feature_sets(config):
+    """Return (baseline_name, comparison_name, baseline_label, comparison_label)
+    for the fixed pairwise (baseline vs. comparison) violin/comparison plots,
+    driven by `config.feature_sets` / `config.feature_set_labels` instead of
+    hardcoded literal strings. The first two feature_sets in config order are
+    the baseline and comparison groups; a feature_set without an entry in
+    `config.feature_set_labels` falls back to a title-cased default label."""
+    names = list(config.feature_sets.keys())
+    if len(names) < 2:
+        raise ValueError(
+            f"compare_models requires >= 2 feature_sets in config, got {names}")
+    baseline, comparison = names[0], names[1]
+    labels = config.feature_set_labels or {}
+
+    def _label(name):
+        return labels.get(name, name.replace('_', ' ').title())
+
+    return baseline, comparison, _label(baseline), _label(comparison)
 
 
 def discover_results(save_dir, models=None):
-    """Load every `{subject}__{model_tag}__{condition}.pkl` in save_dir into a
-    tidy DataFrame: one row per (subject, model_tag, condition), with
+    """Load every `{subject}__{model_tag}__{feature_set}.pkl` in save_dir into a
+    tidy DataFrame: one row per (subject, model_tag, feature_set), with
     `r_per_channel` (ndarray) and `channel_names` (list) columns.
 
     `models`, if given, restricts to those model_tag values (e.g.
     ['sklearn_ridge', 'conv_nonlinear']); default is whatever's present.
     """
+    # `{subject}__{model_tag}__{feature_set}.pkl` (see results.result_filename)
+    # -- glob on the two `__` separators + `.pkl` extension only, not a
+    # `Sub*`-prefixed subject name, so this works for any dataset's subject
+    # naming convention (liberi's 'Sub2', OpenMIIR's 'P01', Daly's 'sub-01', ...).
     rows = []
-    for path in sorted(Path(save_dir).glob('Sub*__*__*.pkl')):
+    for path in sorted(Path(save_dir).glob('*__*__*.pkl')):
         with open(path, 'rb') as f:
             result = pickle.load(f)
 
@@ -64,7 +82,7 @@ def discover_results(save_dir, models=None):
         rows.append({
             'subject': meta['subject'],
             'subject_type': meta.get('subject_type'),
-            'condition': meta['condition'],
+            'feature_set': meta['feature_set'],
             'model_tag': model_tag,
             'channel_names': meta.get('channel_names'),
             'r_per_channel': np.asarray(result['r_per_channel']),
@@ -99,35 +117,38 @@ def _sig_label(p_val):
     return '***' if p_val < 0.001 else '**' if p_val < 0.01 else '*' if p_val < 0.05 else 'ns'
 
 
-def _acoustic_full_arrays(df, model_tag):
-    """(r_acoustic_all, r_full_all): (n_subjects, n_channels) arrays for a
-    model_tag, restricted to subjects that have both conditions."""
+def _paired_feature_set_arrays(df, model_tag, baseline, comparison):
+    """(r_baseline_all, r_comparison_all): (n_subjects, n_channels) arrays for a
+    model_tag, restricted to subjects that have both `baseline` and
+    `comparison` feature_sets."""
     sub_df = df[df['model_tag'] == model_tag]
-    acoustic = sub_df[sub_df['condition'] == 'acoustic'].set_index('subject')
-    full = sub_df[sub_df['condition'] == 'acoustic_and_surprisal'].set_index('subject')
-    common_subjects = sorted(set(acoustic.index) & set(full.index))
-    r_acoustic_all = np.array([acoustic.loc[s, 'r_per_channel'] for s in common_subjects])
-    r_full_all = np.array([full.loc[s, 'r_per_channel'] for s in common_subjects])
-    channel_names = acoustic.loc[common_subjects[0], 'channel_names'] if common_subjects else None
-    return common_subjects, r_acoustic_all, r_full_all, channel_names
+    baseline_df = sub_df[sub_df['feature_set'] == baseline].set_index('subject')
+    comparison_df = sub_df[sub_df['feature_set'] == comparison].set_index('subject')
+    common_subjects = sorted(set(baseline_df.index) & set(comparison_df.index))
+    r_baseline_all = np.array([baseline_df.loc[s, 'r_per_channel'] for s in common_subjects])
+    r_comparison_all = np.array([comparison_df.loc[s, 'r_per_channel'] for s in common_subjects])
+    channel_names = baseline_df.loc[common_subjects[0], 'channel_names'] if common_subjects else None
+    return common_subjects, r_baseline_all, r_comparison_all, channel_names
 
 
-def plot_single_model(df, model_tag, save_dir):
-    """Per-model acoustic-vs-full violin, per-subject delta-r bar, and
+def plot_single_model(df, model_tag, save_dir, baseline, comparison,
+                       baseline_label, comparison_label):
+    """Per-model baseline-vs-comparison violin, per-subject delta-r bar, and
     per-channel FDR-corrected significance. Adapted from run_models.ipynb's
     `plot()`, pulling subjects/channels from `df` instead of an assumed range."""
-    subjects, r_acoustic_all, r_full_all, channel_names = _acoustic_full_arrays(df, model_tag)
+    subjects, r_baseline_all, r_comparison_all, channel_names = _paired_feature_set_arrays(
+        df, model_tag, baseline, comparison)
     if len(subjects) == 0:
-        print(f"  [warn] {model_tag}: no subjects with both conditions — skipping")
+        print(f"  [warn] {model_tag}: no subjects with both feature_sets — skipping")
         return
 
     n_subjects = len(subjects)
-    n_channels = r_acoustic_all.shape[1]
-    r_acoustic_per_sub = r_acoustic_all.mean(axis=1)
-    r_full_per_sub = r_full_all.mean(axis=1)
-    r_diff_per_sub = r_full_per_sub - r_acoustic_per_sub
+    n_channels = r_baseline_all.shape[1]
+    r_baseline_per_sub = r_baseline_all.mean(axis=1)
+    r_comparison_per_sub = r_comparison_all.mean(axis=1)
+    r_diff_per_sub = r_comparison_per_sub - r_baseline_per_sub
 
-    mean_diff, p_val = permutation_test(r_acoustic_per_sub, r_full_per_sub)
+    mean_diff, p_val = permutation_test(r_baseline_per_sub, r_comparison_per_sub)
     sem_diff = r_diff_per_sub.std() / np.sqrt(n_subjects)
     sig_label = _sig_label(p_val)
     print(f"  {model_tag}: mean dr = {mean_diff:.4f} +/- {sem_diff:.4f} SEM, p = {p_val:.4f} {sig_label}")
@@ -135,10 +156,10 @@ def plot_single_model(df, model_tag, save_dir):
     out_dir = Path(save_dir) / 'comparison'
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Figure 1 – group violin: acoustic vs full ──
+    # ── Figure 1 – group violin: baseline vs comparison ──
     fig, ax = plt.subplots(figsize=(7, 6))
-    data = [r_acoustic_per_sub, r_full_per_sub]
-    labels = [CONDITION_LABELS['acoustic'], CONDITION_LABELS['acoustic_and_surprisal']]
+    data = [r_baseline_per_sub, r_comparison_per_sub]
+    labels = [baseline_label, comparison_label]
     colors = ['steelblue', 'darkorange']
 
     parts = ax.violinplot(data, positions=[1, 2], showmedians=False, showextrema=False)
@@ -147,7 +168,7 @@ def plot_single_model(df, model_tag, save_dir):
         pc.set_alpha(0.6)
 
     for i in range(n_subjects):
-        ax.plot([1, 2], [r_acoustic_per_sub[i], r_full_per_sub[i]],
+        ax.plot([1, 2], [r_baseline_per_sub[i], r_comparison_per_sub[i]],
                 color='gray', alpha=0.4, linewidth=0.8)
 
     for i, (d, color) in enumerate(zip(data, colors), start=1):
@@ -162,7 +183,7 @@ def plot_single_model(df, model_tag, save_dir):
         ax.text(i + 0.08, mean_val, f'Mean: {mean_val:.4f}',
                 color='black', fontsize=10, fontweight='bold', va='center', ha='left', zorder=6)
 
-    y_bracket = max(r_acoustic_per_sub.max(), r_full_per_sub.max()) + 0.005
+    y_bracket = max(r_baseline_per_sub.max(), r_comparison_per_sub.max()) + 0.005
     ax.plot([1, 1, 2, 2], [y_bracket - 0.003, y_bracket, y_bracket, y_bracket - 0.003],
             color='black', linewidth=1.2)
     ax.text(1.5, y_bracket + 0.003, f'p = {p_val:.4f}  {sig_label}',
@@ -188,17 +209,17 @@ def plot_single_model(df, model_tag, save_dir):
                label=f'Group mean dr = {mean_diff:.4f}')
     ax.set_xticks(range(n_subjects))
     ax.set_xticklabels(sub_labels, rotation=45, ha='right', fontsize=9)
-    ax.set_ylabel('dr (full - acoustic)')
-    ax.set_title(f'{model_tag}: Per-Subject Improvement from Adding Surprisal + Entropy')
+    ax.set_ylabel(f'dr ({comparison} - {baseline})')
+    ax.set_title(f'{model_tag}: Per-Subject Improvement from {baseline} to {comparison}')
     ax.legend()
     plt.tight_layout()
     plt.savefig(out_dir / f'{model_tag}_delta_r_per_subject.png', dpi=150, bbox_inches='tight')
     plt.close(fig)
 
     # ── Figure 3 – per-channel group delta-r + FDR-corrected significance ──
-    r_diff_per_channel = (r_full_all - r_acoustic_all).mean(axis=0)
+    r_diff_per_channel = (r_comparison_all - r_baseline_all).mean(axis=0)
     p_per_channel = np.array([
-        permutation_test(r_acoustic_all[:, ch], r_full_all[:, ch])[1]
+        permutation_test(r_baseline_all[:, ch], r_comparison_all[:, ch])[1]
         for ch in range(n_channels)
     ])
     _, p_fdr = fdrcorrection(p_per_channel)
@@ -210,7 +231,7 @@ def plot_single_model(df, model_tag, save_dir):
     axes[0].axhline(r_diff_per_channel.mean(), color='black', linestyle='--', linewidth=1.2,
                     label=f'Mean = {r_diff_per_channel.mean():.4f}')
     axes[0].set_ylabel('Mean dr across subjects')
-    axes[0].set_title(f'{model_tag}: Per-Channel Group dr (full - acoustic)')
+    axes[0].set_title(f'{model_tag}: Per-Channel Group dr ({comparison} - {baseline})')
     axes[0].legend()
 
     neg_log_p_fdr = -np.log10(np.maximum(p_fdr, 1e-10))
@@ -227,8 +248,9 @@ def plot_single_model(df, model_tag, save_dir):
     plt.close(fig)
 
 
-def plot_model_comparison(df, save_dir, models=None):
-    """Cross-model violin: acoustic vs full, side by side per model_tag.
+def plot_model_comparison(df, save_dir, baseline, comparison,
+                           baseline_label, comparison_label, models=None):
+    """Cross-model violin: baseline vs comparison, side by side per model_tag.
     Adapted from run_models.ipynb's `plot_across_models()`."""
     model_tags = models if models is not None else sorted(df['model_tag'].unique())
     colors = ['steelblue', 'darkorange']
@@ -237,51 +259,52 @@ def plot_model_comparison(df, save_dir, models=None):
     spacing = 3
     centers = []
     legend_handles = [
-        Patch(facecolor=colors[0], edgecolor='none', label=CONDITION_LABELS['acoustic']),
-        Patch(facecolor=colors[1], edgecolor='none', label=CONDITION_LABELS['acoustic_and_surprisal']),
+        Patch(facecolor=colors[0], edgecolor='none', label=baseline_label),
+        Patch(facecolor=colors[1], edgecolor='none', label=comparison_label),
     ]
 
     plotted_tags = []
     for i, model_tag in enumerate(model_tags):
-        subjects, r_acoustic_all, r_full_all, _ = _acoustic_full_arrays(df, model_tag)
+        subjects, r_baseline_all, r_comparison_all, _ = _paired_feature_set_arrays(
+            df, model_tag, baseline, comparison)
         if len(subjects) == 0:
             continue
         plotted_tags.append(model_tag)
 
-        r_acoustic_per_sub = r_acoustic_all.mean(axis=1)
-        r_full_per_sub = r_full_all.mean(axis=1)
+        r_baseline_per_sub = r_baseline_all.mean(axis=1)
+        r_comparison_per_sub = r_comparison_all.mean(axis=1)
 
         base = len(plotted_tags[:-1]) * spacing
         pos = [base + 1, base + 2]
         centers.append((pos[0] + pos[1]) / 2)
 
-        parts = ax.violinplot([r_acoustic_per_sub, r_full_per_sub],
+        parts = ax.violinplot([r_baseline_per_sub, r_comparison_per_sub],
                                positions=pos, showmedians=False, showextrema=False)
         for pc, color in zip(parts['bodies'], colors):
             pc.set_facecolor(color)
             pc.set_alpha(0.6)
 
-        for j in range(len(r_acoustic_per_sub)):
-            ax.plot([pos[0], pos[1]], [r_acoustic_per_sub[j], r_full_per_sub[j]],
+        for j in range(len(r_baseline_per_sub)):
+            ax.plot([pos[0], pos[1]], [r_baseline_per_sub[j], r_comparison_per_sub[j]],
                     color='gray', alpha=0.4, linewidth=0.7)
 
-        jitter = np.random.uniform(-0.04, 0.04, size=len(r_acoustic_per_sub))
-        ax.scatter(np.full(len(r_acoustic_per_sub), pos[0]) + jitter, r_acoustic_per_sub,
+        jitter = np.random.uniform(-0.04, 0.04, size=len(r_baseline_per_sub))
+        ax.scatter(np.full(len(r_baseline_per_sub), pos[0]) + jitter, r_baseline_per_sub,
                    color=colors[0], edgecolors='white', linewidths=0.5, s=40, alpha=0.8, zorder=4)
-        jitter = np.random.uniform(-0.04, 0.04, size=len(r_full_per_sub))
-        ax.scatter(np.full(len(r_full_per_sub), pos[1]) + jitter, r_full_per_sub,
+        jitter = np.random.uniform(-0.04, 0.04, size=len(r_comparison_per_sub))
+        ax.scatter(np.full(len(r_comparison_per_sub), pos[1]) + jitter, r_comparison_per_sub,
                    color=colors[1], edgecolors='white', linewidths=0.5, s=40, alpha=0.8, zorder=4)
 
-        for k, d in enumerate([r_acoustic_per_sub, r_full_per_sub]):
+        for k, d in enumerate([r_baseline_per_sub, r_comparison_per_sub]):
             mean_val = d.mean()
             sem = d.std() / np.sqrt(len(d))
             ax.errorbar(pos[k], mean_val, yerr=sem, fmt='o', color='black',
                         markersize=6, capsize=4, linewidth=1.5, zorder=5)
 
         try:
-            _, p_val = permutation_test(r_acoustic_per_sub, r_full_per_sub)
+            _, p_val = permutation_test(r_baseline_per_sub, r_comparison_per_sub)
             sig_label = _sig_label(p_val)
-            y_bracket = max(r_acoustic_per_sub.max(), r_full_per_sub.max()) + 0.005
+            y_bracket = max(r_baseline_per_sub.max(), r_comparison_per_sub.max()) + 0.005
             ax.plot([pos[0], pos[0], pos[1], pos[1]],
                     [y_bracket - 0.003, y_bracket, y_bracket, y_bracket - 0.003],
                     color='black', linewidth=1.0)
@@ -311,10 +334,10 @@ def plot_model_comparison(df, save_dir, models=None):
 
 
 def print_summary_table(df):
-    """Mean r (averaged over channels and subjects) per model_tag x condition."""
+    """Mean r (averaged over channels and subjects) per model_tag x feature_set."""
     summary = (
         df.assign(mean_r=df['r_per_channel'].apply(np.mean))
-          .groupby(['model_tag', 'condition'])['mean_r']
+          .groupby(['model_tag', 'feature_set'])['mean_r']
           .agg(['mean', 'std', 'count'])
           .round(4)
     )
@@ -332,14 +355,25 @@ def _build_parser():
     return p
 
 
-def main(save_dir=None, models=None):
-    if save_dir is None or models is None:
-        args, _ = _build_parser().parse_known_args(sys.argv[1:])
-        if save_dir is None:
-            config = load_config(cli_args=sys.argv[1:])
-            save_dir = Path(args.save_dir) if args.save_dir else config.save_dir
-        if models is None:
-            models = args.models.split(',') if args.models else None
+def main(save_dir, models=None, config=None):
+    """`models`, if given, restricts to those model_tag values (e.g.
+    ['sklearn_ridge', 'conv_nonlinear']); None means no filtering (whatever's
+    present in save_dir). Deliberately does NOT fall back to parsing
+    sys.argv itself -- run_all_models.py calls this in-process with its own
+    argv still on the stack, and its `--models` flag uses a different
+    vocabulary (short script names like 'sklearn') than this module's
+    model_tag names, so re-deriving `models` from sys.argv here would
+    silently misinterpret it (see the CLI wrapper below for the
+    argv-parsing this function itself intentionally avoids).
+
+    `config` is required -- it's the source of which 2 feature_sets to
+    compare (baseline vs. comparison) and their display labels; see
+    _resolve_feature_sets."""
+    if config is None:
+        raise ValueError(
+            "compare_models.main() requires a `config` (from config.load_config()) "
+            "to resolve which feature_sets to compare.")
+    baseline, comparison, baseline_label, comparison_label = _resolve_feature_sets(config)
 
     save_dir = Path(save_dir)
     print(f"Comparing results in {save_dir}")
@@ -348,11 +382,17 @@ def main(save_dir=None, models=None):
     print_summary_table(df)
 
     for model_tag in sorted(df['model_tag'].unique()):
-        plot_single_model(df, model_tag, save_dir)
-    plot_model_comparison(df, save_dir, models=models)
+        plot_single_model(df, model_tag, save_dir, baseline, comparison,
+                           baseline_label, comparison_label)
+    plot_model_comparison(df, save_dir, baseline, comparison,
+                           baseline_label, comparison_label, models=models)
 
     print(f"\nComparison plots saved to {save_dir / 'comparison'}")
 
 
 if __name__ == '__main__':
-    main()
+    _args, _ = _build_parser().parse_known_args(sys.argv[1:])
+    _config = load_config(cli_args=sys.argv[1:])
+    _save_dir = Path(_args.save_dir) if _args.save_dir else _config.save_dir
+    _models = _args.models.split(',') if _args.models else None
+    main(_save_dir, models=_models, config=_config)

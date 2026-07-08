@@ -2,7 +2,7 @@
 run_all_models.py — run all 4 TRF experiment scripts, then compare results.
 
 Runs TRF_sklearn.py / TRF_mne.py / TRF_boosting.py / TRF_conv.py as
-subprocesses (each already loops over every subject x condition and saves its
+subprocesses (each already loops over every subject x feature_set and saves its
 own pickles incrementally via results.py) so there's no shared-interpreter
 state between them (each sets up its own torch/mne/eelbrain globals). If a
 script fails, its failure is logged and the remaining scripts still run —
@@ -48,8 +48,35 @@ def _build_parser():
     return p
 
 
+# Forwarded flags whose values are filesystem paths. Subprocesses run with
+# cwd=SCRIPT_DIR (experiments/), which can differ from the invoking shell's
+# cwd (e.g. running `python experiments/run_all_models.py --config
+# experiments/config_openmiir.yaml` from TRF/) -- a relative value for any of
+# these would resolve against the wrong directory once forwarded verbatim, so
+# _absolutize_path_args rewrites them (relative to *this* process's cwd,
+# captured before anything below changes directory) before they're forwarded.
+_PATH_VALUED_FLAGS = ('--config', '--save-dir')
+
+
+def _absolutize_path_args(args_list, flags=_PATH_VALUED_FLAGS):
+    """Return a copy of `args_list` with each `--flag value` / `--flag=value`
+    pair (for `flags`) rewritten to an absolute path, resolved against the
+    current working directory. Leaves already-absolute paths unchanged."""
+    out = list(args_list)
+    for i, tok in enumerate(out):
+        if tok in flags and i + 1 < len(out):
+            out[i + 1] = str(Path(out[i + 1]).resolve())
+        else:
+            for flag in flags:
+                if tok.startswith(flag + '='):
+                    out[i] = f"{flag}={Path(tok[len(flag) + 1:]).resolve()}"
+                    break
+    return out
+
+
 def main():
     args, forwarded_args = _build_parser().parse_known_args(sys.argv[1:])
+    forwarded_args = _absolutize_path_args(forwarded_args)
 
     selected = list(MODEL_SCRIPTS) if args.models is None else args.models.split(',')
     unknown = set(selected) - set(MODEL_SCRIPTS)
@@ -58,6 +85,10 @@ def main():
 
     # Resolve one canonical save_dir up front so every subprocess (even ones
     # started after midnight relative to the first) lands in the same place.
+    # load_config() re-parses sys.argv itself (not forwarded_args), so this
+    # is unaffected by the rewrite above; config.paths.save_dir is already
+    # absolute (see config._resolve_paths) regardless of what --save-dir
+    # looked like on the original command line.
     config = load_config(cli_args=sys.argv[1:])
     save_dir = config.save_dir
     if '--save-dir' not in forwarded_args:
@@ -85,7 +116,7 @@ def main():
         return
 
     print(f"\n{'=' * 70}\nComparing results\n{'=' * 70}")
-    compare_models.main(save_dir=save_dir)
+    compare_models.main(save_dir=save_dir, config=config)
 
 
 if __name__ == '__main__':

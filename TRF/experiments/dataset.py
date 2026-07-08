@@ -2,23 +2,23 @@
 dataset.py — PreparedSubject + TRFDataset, the single pipeline entry point for
 every TRF script.
 
-Two classes, split at the one point in the pipeline where `condition` first
+Two classes, split at the one point in the pipeline where `feature_set` first
 matters:
 
-  PreparedSubject : runs everything that is condition-INDEPENDENT for one
+  PreparedSubject : runs everything that is feature_set-INDEPENDENT for one
       subject — per-trial LPF/downsample/HPF, MNE + eelbrain construction,
       stimulus/IDyOM alignment, per-trial numpy assembly (utils.* steps 1-6).
       Built ONCE per subject.
   TRFDataset      : a torch.utils.data.Dataset finalizing one PreparedSubject
-      for one condition — per-trial z-scoring of that condition's feature
+      for one feature_set — per-trial z-scoring of that feature_set's feature
       subset (step 7, cheap) plus window/sample-level indexing for DataLoader.
-      Built once per (subject, condition) via PreparedSubject.to_dataset(...).
+      Built once per (subject, feature_set) via PreparedSubject.to_dataset(...).
 
-Why the split: every consumer script needs BOTH conditions ('acoustic' and
-'acoustic_and_surprisal') for each subject, but conditions differ only in step
-7 — steps 1-6 (the expensive/most of the work) are identical either way. Before
-this split, TRFDataset.__init__ reran steps 1-6 from scratch for every
-condition (2x redundant work per subject, 20x across the cohort). Now:
+Why the split: every consumer script needs BOTH feature sets ('acoustic' and
+'acoustic_and_surprisal') for each subject, but feature sets differ only in
+step 7 — steps 1-6 (the expensive/most of the work) are identical either way.
+Before this split, TRFDataset.__init__ reran steps 1-6 from scratch for every
+feature_set (2x redundant work per subject, 20x across the cohort). Now:
 PreparedSubject(subject, eeg_data, config) once, then
 .to_dataset('acoustic', ...) and .to_dataset('acoustic_and_surprisal', ...)
 each just redo the cheap step 7 + window indexing.
@@ -27,8 +27,8 @@ The pipeline behavior is numerically identical to before this split — this is
 a reorganization of when/how often each step runs, not a change to what it
 computes. `zscore_trials` (step 7) builds new arrays/dicts rather than
 mutating its input, so calling it twice against the same
-PreparedSubject._trials_raw (once per condition) is safe: no aliasing between
-the two conditions' z-scored outputs.
+PreparedSubject._trials_raw (once per feature_set) is safe: no aliasing
+between the two feature sets' z-scored outputs.
 
 Consumption
 -----------
@@ -41,7 +41,7 @@ Consumption
     prepared = PreparedSubject('Sub2', eeg_data, config)   # steps 1-6, ONCE
 
     # Full-trial mode (sklearn / mne / boosting): ds.trials is the list of
-    # per-trial z-scored numpy dicts the old Dataset.get_trials(condition) gave.
+    # per-trial z-scored numpy dicts the old Dataset.get_trials(feature_set) gave.
     ds = prepared.to_dataset('acoustic', window_samples=None)   # step 7 only
     ds.trials          # list[dict]: {'eeg': (T,n_ch), <feature>: (T,), ...}
     ds.events          # eelbrain Dataset, for eelbrain.boosting()
@@ -54,7 +54,7 @@ Consumption
     ds.window_trial_indices       # len(ds)-long array of source trial ids
 
     # TRFDataset can still be constructed directly (builds its own throwaway
-    # PreparedSubject internally) when only one condition is ever needed:
+    # PreparedSubject internally) when only one feature_set is ever needed:
     from dataset import TRFDataset
     ds = TRFDataset('Sub2', eeg_data, 'acoustic', config, window_samples=None)
 """
@@ -67,9 +67,9 @@ import utils
 
 
 class PreparedSubject:
-    """One subject's condition-independent pipeline state (utils.* steps 1-6),
-    computed once and shared across as many per-condition TRFDataset views as
-    needed via `to_dataset(condition, ...)`.
+    """One subject's feature_set-independent pipeline state (utils.* steps 1-6),
+    computed once and shared across as many per-feature_set TRFDataset views as
+    needed via `to_dataset(feature_set, ...)`.
 
     Parameters
     ----------
@@ -103,40 +103,53 @@ class PreparedSubject:
         self.events = utils.create_eelbrain_events(raw)
         # 4. shared stimulus / IDyOM library (cached across subjects)
         self._lib = stimulus_library or utils.get_stimulus_library(config)
+        # 6 (reordered ahead of 5, see below). Union of every configured
+        # feature_set's keys, in first-seen order — the full feature list this
+        # subject's trials get built with, regardless of which feature_set(s)
+        # will eventually be requested via to_dataset().
+        feature_names = []
+        for keys in config.feature_sets.values():
+            for k in keys:
+                if k not in feature_names:
+                    feature_names.append(k)
+
         # 5. resample/align stimulus + place IDyOM features (mutates self.events).
-        #    Builds ALL surprisal features regardless of which condition will
-        #    eventually be requested — still condition-independent, since
-        #    'acoustic' and 'acoustic_and_surprisal' both derive from this.
+        #    Builds ALL surprisal features regardless of which feature_set will
+        #    eventually be requested — still feature_set-independent, since
+        #    every named feature_set draws from this same superset.
+        #    'envelope'/'onsets' are computed unconditionally inside
+        #    align_stimulus_and_idyom itself; everything else in the union
+        #    (pitch_surprisal, pitch_entropy, ...) requires IDyOM placement.
+        surprisal_keys = [k for k in feature_names if k not in ('envelope', 'onsets')]
         utils.align_stimulus_and_idyom(
             self.events, preprocessed_trials, self._lib, subject, config.sfreq,
-            config.trial_to_song_id, config.feature_keys_surprisal,
+            config.trial_to_song_id, surprisal_keys,
             stimulus_paths=eeg_data.get('stimulus_paths'), debug=debug)
         # 6. per-trial numpy assembly (all features, not yet z-scored)
-        feature_names = config.feature_keys_acoustic + config.feature_keys_surprisal
         (self._trials_raw, self.sensor_dim,
          self.channel_names, self.n_channels) = utils.build_trials(
             self.events, feature_names, subject)
 
-    def to_dataset(self, condition, window_samples=None, hop_samples=None):
-        """Finalize this prepared subject for one condition: step 7
+    def to_dataset(self, feature_set, window_samples=None, hop_samples=None):
+        """Finalize this prepared subject for one feature_set: step 7
         (zscore_trials, cheap) + window indexing. Returns a TRFDataset.
 
-        Safe to call more than once (e.g. once per condition) on the same
+        Safe to call more than once (e.g. once per feature_set) on the same
         PreparedSubject — zscore_trials returns new arrays/dicts rather than
         mutating self._trials_raw, so the resulting TRFDatasets' `.trials`
         are fully independent of each other.
         """
-        return TRFDataset._from_prepared(self, condition, window_samples, hop_samples)
+        return TRFDataset._from_prepared(self, feature_set, window_samples, hop_samples)
 
 # could also be all of the subjects
 class TRFDataset(TorchDataset):
     """One subject's preprocessed, feature-aligned, z-scored EEG + stimulus data
-    for one condition, indexable at the window (or whole-trial) level.
+    for one feature_set, indexable at the window (or whole-trial) level.
 
-    Prefer constructing this via PreparedSubject.to_dataset(condition, ...)
-    when a subject's EEG will be used for more than one condition (the normal
+    Prefer constructing this via PreparedSubject.to_dataset(feature_set, ...)
+    when a subject's EEG will be used for more than one feature_set (the normal
     case) — it skips re-running steps 1-6. The constructor below remains
-    available for one-off, single-condition use; it just builds a throwaway
+    available for one-off, single-feature_set use; it just builds a throwaway
     PreparedSubject internally.
 
     Parameters
@@ -144,8 +157,8 @@ class TRFDataset(TorchDataset):
     subject : str
     eeg_data : dict
         From utils.load_subject_raw_eeg(path, subject).
-    condition : str
-        Key into config.conditions ('acoustic' | 'acoustic_and_surprisal').
+    feature_set : str
+        Key into config.feature_sets ('acoustic' | 'acoustic_and_surprisal').
     config : Config
         From config.load_config().
     stimulus_library : optional
@@ -159,23 +172,23 @@ class TRFDataset(TorchDataset):
         Window stride; defaults to window_samples (non-overlapping).
     """
 
-    def __init__(self, subject, eeg_data, condition, config, stimulus_library=None,
+    def __init__(self, subject, eeg_data, feature_set, config, stimulus_library=None,
                  window_samples=None, hop_samples=None, debug=False):
         prepared = PreparedSubject(subject, eeg_data, config, stimulus_library, debug)
-        self._init_from_prepared(prepared, condition, window_samples, hop_samples)
+        self._init_from_prepared(prepared, feature_set, window_samples, hop_samples)
 
     @classmethod
-    def _from_prepared(cls, prepared, condition, window_samples=None, hop_samples=None):
+    def _from_prepared(cls, prepared, feature_set, window_samples=None, hop_samples=None):
         self = cls.__new__(cls)
-        self._init_from_prepared(prepared, condition, window_samples, hop_samples)
+        self._init_from_prepared(prepared, feature_set, window_samples, hop_samples)
         return self
 
-    def _init_from_prepared(self, prepared, condition, window_samples, hop_samples):
+    def _init_from_prepared(self, prepared, feature_set, window_samples, hop_samples):
         config = prepared.config
         self.subject = prepared.subject
-        self.condition = condition # features considered
+        self.feature_set = feature_set  # named subset of features considered
         self.config = config
-        self.feature_keys = config.conditions[condition]
+        self.feature_keys = config.feature_sets[feature_set]
 
         # Subject-level metadata and eelbrain events, shared read-only from
         # the PreparedSubject (not recomputed).
@@ -185,9 +198,9 @@ class TRFDataset(TorchDataset):
         self.channel_names = prepared.channel_names
         self.n_channels = prepared.n_channels
 
-        # 7. per-trial z-scoring of THIS condition's features + EEG (+ checks).
-        # The only step that depends on `condition`; new arrays, no mutation
-        # of prepared._trials_raw, so this is safe to run once per condition.
+        # 7. per-trial z-scoring of THIS feature_set's features + EEG (+ checks).
+        # The only step that depends on `feature_set`; new arrays, no mutation
+        # of prepared._trials_raw, so this is safe to run once per feature_set.
         self.trials = utils.zscore_trials(
             prepared._trials_raw, feature_keys=self.feature_keys,
             subject=self.subject, debug=prepared.debug)
@@ -237,7 +250,7 @@ class TRFDataset(TorchDataset):
 
     def __getitem__(self, idx):
         """Return one (X, Y) window as float32 tensors, channel-first:
-            X : (n_features, window_len)  — feature order = config.conditions[cond]
+            X : (n_features, window_len)  — feature order = config.feature_sets[feature_set]
             Y : (n_channels, window_len)
         In full-trial mode window_len is that trial's full length.
         """
@@ -265,8 +278,8 @@ class TRFDataset(TorchDataset):
 
 
 if __name__ == '__main__':
-    # Smoke test: PreparedSubject shared across both conditions for Sub2, plus
-    # full-trial mode + windowed mode, confirming no cross-condition aliasing.
+    # Smoke test: PreparedSubject shared across both feature sets for Sub2, plus
+    # full-trial mode + windowed mode, confirming no cross-feature_set aliasing.
     from config import load_config
 
     config = load_config()
@@ -276,11 +289,11 @@ if __name__ == '__main__':
 
     prepared = PreparedSubject(subject, eeg_data, config, debug=True)
 
-    # ── both conditions share the same PreparedSubject (steps 1-6 run once) ──
+    # ── both feature sets share the same PreparedSubject (steps 1-6 run once) ──
     ds_acoustic = prepared.to_dataset('acoustic', window_samples=None)
     ds_full = prepared.to_dataset('acoustic_and_surprisal', window_samples=None)
     assert ds_acoustic.events is ds_full.events is prepared.events, \
-        "both conditions should share the same PreparedSubject.events object"
+        "both feature sets should share the same PreparedSubject.events object"
     assert ds_acoustic.trials is not ds_full.trials
     # 'acoustic' only z-scores 2 features; 'acoustic_and_surprisal' z-scores 6.
     assert set(ds_acoustic.trials[0].keys()) == {'eeg', 'envelope', 'onsets'}
@@ -290,7 +303,7 @@ if __name__ == '__main__':
     # calling to_dataset twice must not have mutated prepared._trials_raw in a
     # way that cross-contaminates: envelope z-scored the same way in both.
     assert np.allclose(ds_acoustic.trials[0]['envelope'], ds_full.trials[0]['envelope'])
-    print("[PreparedSubject] shared events, independent per-condition trials: OK")
+    print("[PreparedSubject] shared events, independent per-feature_set trials: OK")
 
     assert len(ds_full) == len(ds_full.trial_lengths) == ds_full.n_trials
     X0, Y0 = ds_full[0]

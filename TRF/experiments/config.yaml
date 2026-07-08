@@ -111,9 +111,16 @@ trf:
   tmax: 0.600          # seconds, receptive-field end   (post-stimulus)
   ic_clip: 15.0        # bits, IDyOM surprisal clip ceiling
 
-feature_keys:
+feature_sets:
   acoustic: ["envelope", "onsets"]
-  surprisal: ["pitch_surprisal", "pitch_entropy", "onset_surprisal", "onset_entropy"]
+  acoustic_and_surprisal: ["envelope", "onsets", "pitch_surprisal", "pitch_entropy", "onset_surprisal", "onset_entropy"]
+
+# Display labels for each feature_set in compare_models.py's violin/comparison
+# plots. Optional -- a feature_set without an entry here falls back to a
+# title-cased default (see compare_models._resolve_feature_sets).
+feature_set_labels:
+  acoustic: "Acoustic\n(envelope)"
+  acoustic_and_surprisal: "Full\n(+ onsets + surprisal + entropy)"
 
 # Default windowing for TRFDataset's sample/window-level __getitem__.
 # window_samples: null  -> one window per trial, spanning the whole trial

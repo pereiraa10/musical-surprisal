@@ -13,7 +13,7 @@ Usage
     config = load_config()                       # config.yaml next to this file
     config = load_config(cli_args=sys.argv[1:])  # honor --sfreq/--tmin/... overrides
 
-    config.conditions            # {'acoustic': [...], 'acoustic_and_surprisal': [...]}
+    config.feature_sets           # {'acoustic': [...], 'acoustic_and_surprisal': [...]}
     config.tmin, config.tmax, config.sfreq
     config.subjects              # list[str]
     config.paths.eeg_dir, config.paths.save_dir  # resolved absolute Paths
@@ -66,11 +66,13 @@ class Config:
     tmin: float
     tmax: float
     ic_clip: float
-    feature_keys_acoustic: list
-    feature_keys_surprisal: list
-    conditions: dict
+    feature_sets: dict
     window_samples: Optional[int] = None
     hop_samples: Optional[int] = None
+    # Display labels for compare_models.py's violin/comparison plots, keyed by
+    # feature_set name. Optional per-YAML; feature_sets without an entry here
+    # fall back to a title-cased default (compare_models._resolve_feature_sets).
+    feature_set_labels: dict = field(default_factory=dict)
     # 'mat' (default, liberi_dataset's precomputed dataStim.mat) or
     # 'audio_files' (compute envelope on demand from raw stimulus audio) —
     # selects the _StimulusLibrary source mode in utils.get_stimulus_library.
@@ -164,12 +166,8 @@ def load_config(path=None, cli_args=None):
 
     paths = _resolve_paths(raw["paths"], save_dir_override=args.save_dir)
 
-    feature_keys_acoustic = list(raw["feature_keys"]["acoustic"])
-    feature_keys_surprisal = list(raw["feature_keys"]["surprisal"])
-    conditions = {
-        "acoustic": feature_keys_acoustic,
-        "acoustic_and_surprisal": feature_keys_acoustic + feature_keys_surprisal,
-    }
+    feature_sets = {name: list(keys) for name, keys in raw["feature_sets"].items()}
+    feature_set_labels = dict(raw.get("feature_set_labels", {}))
 
     # trial_to_song_id keys must be ints (YAML usually parses them as ints
     # already, but coerce defensively so lookups by int(marker) never miss).
@@ -199,9 +197,8 @@ def load_config(path=None, cli_args=None):
         ic_clip=ic_clip,
         stimulus_source_type=stimulus_source_type,
         trial_to_stimulus=trial_to_stimulus,
-        feature_keys_acoustic=feature_keys_acoustic,
-        feature_keys_surprisal=feature_keys_surprisal,
-        conditions=conditions,
+        feature_sets=feature_sets,
+        feature_set_labels=feature_set_labels,
         window_samples=window_samples,
         hop_samples=hop_samples,
     )
@@ -222,7 +219,8 @@ if __name__ == "__main__":
     print(f"  lpf/hpf/ic_clip   : {cfg.high_frequency} / {cfg.low_frequency} / {cfg.ic_clip}")
     print(f"  window/hop        : {cfg.window_samples} / {cfg.hop_samples}")
     print(f"  n subjects        : {len(cfg.subjects)}")
-    print(f"  conditions        : { {k: v for k, v in cfg.conditions.items()} }")
+    print(f"  feature_sets      : { {k: v for k, v in cfg.feature_sets.items()} }")
+    print(f"  feature_set_labels: {cfg.feature_set_labels}")
     print(f"  subject_type[Sub2]: {cfg.subject_type.get('Sub2')}")
     print(f"  trial_to_song[1,11,20]: "
           f"{cfg.trial_to_song_id.get(1)}, {cfg.trial_to_song_id.get(11)}, {cfg.trial_to_song_id.get(20)}")

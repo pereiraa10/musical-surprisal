@@ -13,7 +13,7 @@ correlation_plot.ipynb) possible without per-script loading code.
 
 Filename convention
 --------------------
-    {subject}__{model_family}[_{variant}]__{condition}.pkl
+    {subject}__{model_family}[_{variant}]__{feature_set}.pkl
 e.g. Sub10__sklearn_ridge__acoustic.pkl
      Sub10__conv__nonlinear__acoustic_and_surprisal.pkl   (variant kept distinct)
 
@@ -25,7 +25,7 @@ Pickle schema
 -------------
     {
       'meta': {
-          'subject', 'subject_type', 'condition', 'feature_keys',
+          'subject', 'subject_type', 'feature_set', 'feature_keys',
           'model_family', 'model_variant', 'channel_names',
           'trial_boundaries',   # list[(start, end)] into Y_pred/Y_true per trial
           'best_alpha', 'date_run', ...any extra_meta passed in
@@ -35,7 +35,7 @@ Pickle schema
       'Y_pred', 'Y_true': (T_total, n_channels) float32 ndarray — always saved,
                           every model. float32 (not float64): a full-precision
                           pair runs ~300MB/file, which multiplies to 50-100+ GB
-                          across 20 subjects x 2 conditions x ~6 model/variants;
+                          across 20 subjects x 2 feature_sets x ~6 model/variants;
                           float32 halves that and is still far finer than the
                           64 Hz EEG signal's actual precision. Correlations in
                           this file are computed before downcasting.
@@ -58,9 +58,9 @@ DEFAULT_SFREQ = 64
 DEFAULT_CHANNEL_IDX = 0
 
 
-def result_filename(save_dir, subject, model_family, condition, variant=None):
+def result_filename(save_dir, subject, model_family, feature_set, variant=None):
     model_tag = model_family if variant is None else f'{model_family}_{variant}'
-    return save_dir / f'{subject}__{model_tag}__{condition}.pkl'
+    return save_dir / f'{subject}__{model_tag}__{feature_set}.pkl'
 
 
 def per_trial_r(Y_true, Y_pred, trial_boundaries):
@@ -73,7 +73,7 @@ def per_trial_r(Y_true, Y_pred, trial_boundaries):
     return out
 
 
-def build_result(*, subject, subject_type, condition, feature_keys, model_family,
+def build_result(*, subject, subject_type, feature_set, feature_keys, model_family,
                   channel_names, Y_true=None, Y_pred=None, trial_boundaries=None,
                   r_per_channel=None, model_variant=None, best_alpha=None,
                   alpha_selection=None, weights=None, training_history=None,
@@ -128,14 +128,14 @@ def build_result(*, subject, subject_type, condition, feature_keys, model_family
         if len(channel_names) != Y_true.shape[1]:
             raise ValueError(
                 f"channel_names length ({len(channel_names)}) != Y_true channel "
-                f"count ({Y_true.shape[1]}) for {subject} / {condition} / "
+                f"count ({Y_true.shape[1]}) for {subject} / {feature_set} / "
                 f"{model_family}."
             )
 
     meta = {
         'subject': subject,
         'subject_type': subject_type,
-        'condition': condition,
+        'feature_set': feature_set,
         'feature_keys': list(feature_keys),
         'model_family': model_family,
         'model_variant': model_variant,
@@ -149,7 +149,7 @@ def build_result(*, subject, subject_type, condition, feature_keys, model_family
 
     # Correlations above are computed from the original (float64) arrays for
     # numerical accuracy; only the stored copies are downcast. A ~300MB/file
-    # float64 Y_pred+Y_true pair (20 subjects x 2 conditions x ~6 models would
+    # float64 Y_pred+Y_true pair (20 subjects x 2 feature_sets x ~6 models would
     # be 50-100+ GB) halves to ~150MB in float32, which is still far finer
     # than the 64 Hz EEG signal's actual precision.
     if Y_pred is not None:
@@ -178,7 +178,7 @@ def plot_alignment(result, save_dir, channel_idx=DEFAULT_CHANNEL_IDX, sfreq=DEFA
         return
 
     meta = result['meta']
-    subject, condition = meta['subject'], meta['condition']
+    subject, feature_set = meta['subject'], meta['feature_set']
     model_tag = meta['model_family']
     if meta.get('model_variant'):
         model_tag = f"{model_tag}_{meta['model_variant']}"
@@ -191,7 +191,7 @@ def plot_alignment(result, save_dir, channel_idx=DEFAULT_CHANNEL_IDX, sfreq=DEFA
     fig, axes = plt.subplots(2, 1, figsize=(14, 7), sharex=True)
     fig.suptitle(
         f'Predicted vs Actual EEG  |  {subject}, channel {ch}\n'
-        f'{model_tag}  ·  {condition}  ·  r = {r_vals[ch]:.3f}',
+        f'{model_tag}  ·  {feature_set}  ·  r = {r_vals[ch]:.3f}',
         fontsize=12, fontweight='bold')
 
     axes[0].plot(t_plot, Y_true[:n_plot, ch],
@@ -214,7 +214,7 @@ def plot_alignment(result, save_dir, channel_idx=DEFAULT_CHANNEL_IDX, sfreq=DEFA
     axes[1].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    fname = save_dir / f"{subject}_{condition}_{model_tag}_alignment_ch{ch}.png"
+    fname = save_dir / f"{subject}_{feature_set}_{model_tag}_alignment_ch{ch}.png"
     plt.savefig(fname, dpi=150, bbox_inches='tight')
     plt.close(fig)
     return fname
