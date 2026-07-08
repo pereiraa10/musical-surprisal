@@ -16,4 +16,5 @@ TRF/TRF_offset_diagnostic_output/
 topo graphs/
 recreating Fig 4A.xlsx/
 TRF/experiments/.venv
+TRF/experiments/datasets
 NRT/pickles*
