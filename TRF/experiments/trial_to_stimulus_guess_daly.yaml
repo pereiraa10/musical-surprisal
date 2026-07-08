@@ -1,0 +1,545 @@
+# trial_to_stimulus_guess_daly.yaml — UNVERIFIED, experimental duration-based
+# guess at the ds002725 classicalMusic trial_to_stimulus mapping. Generated
+# by daly_duration_guess.py -- see that file's docstring for the method and
+# its limitations.
+#
+# NOT channel-verified. Does NOT distinguish trial type (music-only vs.
+# music-and-reporting vs. reporting-only) -- the reporting-only third of
+# trials has no real audio regardless of which piece is listed here. Do NOT
+# use this for a real TRF fit without independent verification. It is not
+# read by config.py / the pipeline; config_daly.yaml's own trial_to_stimulus
+# stays null.
+#
+# Each subject's entry gives, per trial: [guessed_filename, abs_error_seconds].
+# total_error_seconds (per subject) is the sum of abs_error across its 12
+# trials -- a large value is a signal this subject's guess is unreliable.
+#
+# Two further known limitations, visible in the numbers below:
+#  - Assignment is nearest-duration per trial within the chosen 4-piece
+#    subset, NOT balanced to exactly 3 trials/piece (the paper's actual
+#    design) -- in practice most subjects skew heavily toward one piece
+#    (often p5_mendelssohn, whose ~160s duration sits centrally among the
+#    observed trial durations), which is a real assignment artifact, not
+#    evidence that piece was replayed that often.
+#  - Every subject's LAST trial shows an outsized error: there is no
+#    trial-end marker in this dataset, so the last trial's boundary falls
+#    back to end-of-recording, which can include dead time after the final
+#    piece actually finished playing -- treat every subject's last entry as
+#    especially unreliable.
+# 'missing_edf' subjects have no classicalMusic recording in the dataset at all.
+
+sub-01:
+  total_error_seconds: 36.8
+  trials:
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.8
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.9
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.6
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.4
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.3
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.1
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.5
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.6
+sub-02:
+  total_error_seconds: 38.2
+  trials:
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.0
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.7
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 7.1
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.9
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.0
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.3
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.7
+  - - p3_chopin-n3-op10-bertoglio.mp3
+    - 3.7
+sub-03:
+  total_error_seconds: 65.3
+  trials:
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.0
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.3
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.9
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 3.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.6
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.6
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.8
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.3
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 31.0
+sub-04:
+  total_error_seconds: 58.1
+  trials:
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.3
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.7
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.7
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.1
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.8
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.3
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.3
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.6
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 26.9
+sub-05:
+  total_error_seconds: 41.3
+  trials:
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.3
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.7
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 2.9
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.7
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.2
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.4
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 8.6
+sub-06:
+  total_error_seconds: 58.9
+  trials:
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.3
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.0
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.4
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.8
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.2
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.1
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.5
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.8
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.7
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 24.1
+sub-07:
+  total_error_seconds: 50.9
+  trials:
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.5
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.7
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.4
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.9
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.9
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.2
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.9
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.5
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 17.4
+sub-08:
+  total_error_seconds: 36.9
+  trials:
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.5
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.7
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.4
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.2
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.3
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.1
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.9
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.9
+sub-09:
+  total_error_seconds: 36.5
+  trials:
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.0
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.7
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.2
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 2.9
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.1
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.7
+  - - p3_chopin-n3-op10-bertoglio.mp3
+    - 2.8
+sub-10:
+  total_error_seconds: 65.3
+  trials:
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.3
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.0
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.8
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.3
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.8
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.4
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.5
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 32.5
+sub-11:
+  total_error_seconds: 134.4
+  trials:
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.5
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 7.0
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.0
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 3.0
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 3.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.6
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.2
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.1
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 97.3
+sub-12:
+  total_error_seconds: 58.0
+  trials:
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.6
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.5
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.5
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 3.2
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.5
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.1
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.2
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.9
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 25.3
+sub-13: missing_edf
+sub-14:
+  total_error_seconds: 39.3
+  trials:
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.8
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.3
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.7
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.2
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.5
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.6
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.7
+  - - p1_chopin-n10-op12-bertoglio.mp3
+    - 2.0
+sub-15:
+  total_error_seconds: 35.3
+  trials:
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.0
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.5
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.2
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.9
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 2.8
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.9
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.3
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.7
+  - - p1_chopin-n10-op12-bertoglio.mp3
+    - 1.1
+sub-16:
+  total_error_seconds: 59.3
+  trials:
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.1
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.5
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.3
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.8
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 7.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.6
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.6
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 25.3
+sub-17: missing_edf
+sub-18:
+  total_error_seconds: 64.2
+  trials:
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.5
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 7.0
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.9
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.9
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 3.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 7.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.6
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.9
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.9
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 25.7
+sub-19:
+  total_error_seconds: 49.4
+  trials:
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.4
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.0
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.0
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.0
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.6
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.5
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.2
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.0
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 18.4
+sub-20:
+  total_error_seconds: 90.6
+  trials:
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.2
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.7
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.7
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.7
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.8
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.1
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.9
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 2.8
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.8
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.9
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 57.9
+sub-21:
+  total_error_seconds: 54.8
+  trials:
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 6.5
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.0
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 1.9
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.8
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 3.1
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 4.7
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 5.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 3.6
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 1.0
+  - - p6_beethoven-n4-allegro-molte-e-con-brio-sinadinovic.mp3
+    - 0.9
+  - - p7_beethoven-n3-adagio-con-expression-bertoli.mp3
+    - 0.0
+  - - p5_mendelssohn-variations-serieuses-op54-larrard.mp3
+    - 22.2
