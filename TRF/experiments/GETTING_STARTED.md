@@ -28,11 +28,11 @@ python experiments/TRF_sklearn.py
 python experiments/TRF_mne.py
 
 # eelbrain boosting TRF
-python experiments/TRF_pickle_A_and_AM.py
+python experiments/TRF_boosting.py
 
 # Conv (windowed mini-batch SGD) — set MODEL_VARIANT inside the script first:
 # 'linear' | 'separable' | 'nonlinear'
-python experiments/TRF_conv_2_windowed.py
+python experiments/TRF_conv.py
 ```
 
 Each script loops over every subject in `config.subjects` and both conditions
@@ -46,7 +46,7 @@ evaluation protocol differs — read that before comparing r-values across scrip
 
 Trim `config.yaml`'s `subjects:` list to one subject (e.g. just `Sub2`) for a quick
 end-to-end smoke test of any script. For the conv script, also lower `EPOCHS` near the
-top of `TRF_conv_2_windowed.py` (default 200).
+top of `TRF_conv.py` (default 200).
 
 Inspect what config a script would actually resolve to, without running anything:
 
@@ -66,7 +66,7 @@ Every script honors the same flags (they all call
 
 ```bash
 python experiments/TRF_sklearn.py --sfreq 128 --tmin -0.2 --tmax 0.8
-python experiments/TRF_conv_2_windowed.py --window-samples 256 --hop-samples 128
+python experiments/TRF_conv.py --window-samples 256 --hop-samples 128
 python experiments/TRF_mne.py --save-dir results/my_test_run
 ```
 
@@ -110,39 +110,27 @@ python experiments/TRF_sklearn.py --config experiments/config_openmiir.yaml
 python experiments/run_all_models.py --config experiments/config_openmiir.yaml
 ```
 
-**⚠️ Not actually wired up yet — do not run the above until this is fixed.**
-None of the 4 model scripts pass `trial_to_stimulus` when calling
+All 4 model scripts already pass `trial_to_stimulus` when calling
 `utils.load_subject_raw_eeg`:
-
-```python
-eeg_data = utils.load_subject_raw_eeg(eeg_path, SUBJECT)   # trial_to_stimulus defaults to None
-```
-
-This is harmless for `config.yaml`'s `.mat`-format liberi_dataset
-(`_load_eeg_from_mat` ignores the argument entirely), but any
-`stimulus_source_type: audio_files` dataset needs it — **this means
-`config_daly.yaml` has the same gap, not just `config_openmiir.yaml`**.
-`_load_eeg_from_fif` indexes `trial_to_stimulus[i]` directly and will raise
-`TypeError: 'NoneType' object is not subscriptable`; `_load_eeg_from_edf` treats
-`None` as "no stimulus for this trial" and will silently produce envelope-less
-trials instead of erroring, which is worse. Fixing this means changing each
-script's EEG-load call to pass the subject's stimulus list, e.g.:
 
 ```python
 eeg_data = utils.load_subject_raw_eeg(
     eeg_path, SUBJECT, config.trial_to_stimulus.get(SUBJECT))
 ```
 
-at the 4 call sites: `TRF_sklearn.py:145`, `TRF_mne.py:120`,
-`TRF_boosting.py:107`, `TRF_conv.py:459`. Not yet done — plan this change before
-running any model script against `config_openmiir.yaml` (or `config_daly.yaml`).
+at `TRF_sklearn.py:145`, `TRF_mne.py:120`, `TRF_boosting.py:136`, and
+`TRF_conv.py:459`. This is a no-op for `config.yaml`'s `.mat`-format
+liberi_dataset (`_load_eeg_from_mat` ignores the argument entirely), and is
+required for `stimulus_source_type: audio_files` datasets (`config_openmiir.yaml`,
+`config_daly.yaml`), which resolve it from each config's `trial_to_stimulus:`
+YAML section via `config.py`.
 
 ### 4. Programmatic override (Python shell / notebook / one-off script)
 
 `load_config()` returns a plain `Config` dataclass — mutate it directly. How you inject
 it back depends on *when* a script loads config:
 
-`TRF_sklearn.py` / `TRF_mne.py` / `TRF_pickle_A_and_AM.py` call `load_config()` lazily,
+`TRF_sklearn.py` / `TRF_mne.py` / `TRF_boosting.py` call `load_config()` lazily,
 inside `main()` — patch the module's `load_config` name before calling `main()`:
 
 ```python
@@ -160,11 +148,11 @@ TRF_sklearn.load_config = patched
 TRF_sklearn.main()
 ```
 
-`TRF_conv_2_windowed.py` loads config once at *import time* (a module-level `config`
+`TRF_conv.py` loads config once at *import time* (a module-level `config`
 object, since its architecture constants derive from it) — mutate that object directly:
 
 ```python
-import TRF_conv_2_windowed as conv
+import TRF_conv as conv
 conv.config.subjects = ['Sub2']
 conv.config.conditions = {'acoustic': conv.config.conditions['acoustic']}
 conv.EPOCHS = 2          # script-level hyperparameters override the same way
@@ -173,12 +161,12 @@ conv.main()
 
 ### Model-specific hyperparameters (not in config.yaml)
 
-`TRF_conv_2_windowed.py` has its own knobs near the top of the file — architecture/
+`TRF_conv.py` has its own knobs near the top of the file — architecture/
 training choices, not dataset/preprocessing config: `MODEL_VARIANT`
 ('linear' | 'separable' | 'nonlinear'), `HIDDEN`, `N_BLOCKS`, `EPOCHS`, `LR`,
 `WEIGHT_DECAY`, `EARLY_STOP_PATIENCE`, `WINDOW_SEC`/`HOP_SEC` (seconds; converted to
 samples via `config.sfreq`), `BATCH_SIZE`. Edit them directly in the script.
-`TRF_pickle_A_and_AM.py` similarly has `BASIS`/`PARTITIONS`/`ERROR` as boosting-specific
+`TRF_boosting.py` similarly has `BASIS`/`PARTITIONS`/`ERROR` as boosting-specific
 knobs near its top.
 
 ## Smoke-testing the data pipeline alone (no model fitting)
