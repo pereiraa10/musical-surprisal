@@ -17,4 +17,5 @@ topo graphs/
 recreating Fig 4A.xlsx/
 TRF/experiments/.venv
 TRF/experiments/datasets
+TRF/experiments/results/
 NRT/pickles*

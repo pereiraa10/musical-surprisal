@@ -21,15 +21,14 @@
 #     confirmed via participants.tsv it's the same across all 21 subjects);
 #     genMusic01-03/washout are not wired up yet.
 #
-# Relative paths here are resolved against the parent of experiments/ (the
-# TRF/ directory) inside config.py's _resolve_paths() -- do NOT put absolute
-# paths here.
+# Relative paths here are resolved against experiments/ itself inside
+# config.py's _resolve_paths() -- do NOT put absolute paths here.
 
 paths:
-  data_root: "../../datasets/neuro_dataset/datalad/ds002725-1.0.0"
+  data_root: "datasets/daly_dataset/datalad/ds002725-1.0.0"
   wav_subdir: "stimuli/classical"
   eeg_subdir: ""   # data_root itself: eeg_filename_pattern already includes sub-XX/eeg/...
-  save_dir_template: "pickles/encoding_daly_{date}"
+  save_dir_template: "results/encoding_daly_{date}"
   # No midi_subdir / pitch_surprisal_file / onset_surprisal_file: this
   # dataset has no symbolic score, so Paths leaves those as None (config.py
   # only requires them when stimulus_source_type == 'mat').

@@ -3,7 +3,8 @@ config.py — load all experiment constants from config.yaml, with CLI overrides
 
 Every dataset/preprocessing/TRF constant that used to live at the top of
 dataset.py now lives in config.yaml. This module reads that YAML, resolves
-relative paths against the TRF/ directory (the parent of experiments/), applies
+relative paths against the experiments/ directory itself (so the whole
+pipeline -- datasets and results alike -- is self-contained there), applies
 any command-line overrides, and returns a single nested-dataclass `Config`
 object used consistently across utils.py, dataset.py, and every TRF_*.py script.
 
@@ -33,9 +34,10 @@ from typing import Optional
 
 import yaml
 
-# experiments/ -> TRF/. Relative paths in the YAML are resolved against this,
-# matching the old BASE_DIR = Path(__file__).resolve().parent.parent.
-BASE_DIR = Path(__file__).resolve().parent.parent
+# Relative paths in the YAML (data_root, save_dir_template, ...) are resolved
+# against experiments/ itself, so datasets (experiments/datasets/...) and
+# results (experiments/results/...) both stay inside experiments/.
+BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 
 

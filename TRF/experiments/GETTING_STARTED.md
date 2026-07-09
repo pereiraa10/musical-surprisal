@@ -9,13 +9,14 @@ variants that all consume it identically.
 - A Python environment with: `mne`, `eelbrain`, `torch`, `scipy`, `numpy`, `scikit-learn`,
   `pretty_midi`, `pyyaml` (e.g. `conda activate eelbrain-env`, or your own env — if
   `pyyaml` is missing: `pip install pyyaml`).
-- The dataset in place: `TRF/liberi_dataset/...` (EEG/wav/midi) and the IDyOM surprisal
-  `.mat` outputs at `TRF/../IDyOM/...` (paths come from `experiments/config.yaml`).
+- The dataset in place: `experiments/datasets/liberi_dataset/...` (EEG/wav/midi) and the
+  IDyOM surprisal `.mat` outputs at `experiments/datasets/liberi_dataset/surprisal_data/`
+  (paths come from `experiments/config.yaml`).
 
 ## Running a model
 
-Run from either `TRF/` or `TRF/experiments/` — paths resolve from each file's own
-location, not your current directory.
+Run from `TRF/experiments/` — paths resolve from each file's own location
+(`experiments/`), not your current directory.
 
 ```bash
 cd musical-surprisal/TRF
@@ -36,7 +37,7 @@ python experiments/TRF_conv_2_windowed.py
 
 Each script loops over every subject in `config.subjects` and both conditions
 (`acoustic`, `acoustic_and_surprisal`), writing one pickle per (subject, condition[,
-variant]) to `config.paths.save_dir` (default `TRF/pickles/encoding_<today>/`), named
+variant]) to `config.paths.save_dir` (default `experiments/results/encoding_<today>/`), named
 `{subject}__{model_family}[_{variant}]__{condition}.pkl`. See `results.py`'s module
 docstring for the full pickle schema, and `EVALUATION_NOTES.md` for how each model's
 evaluation protocol differs — read that before comparing r-values across scripts.
@@ -66,7 +67,7 @@ Every script honors the same flags (they all call
 ```bash
 python experiments/TRF_sklearn.py --sfreq 128 --tmin -0.2 --tmax 0.8
 python experiments/TRF_conv_2_windowed.py --window-samples 256 --hop-samples 128
-python experiments/TRF_mne.py --save-dir pickles/my_test_run
+python experiments/TRF_mne.py --save-dir results/my_test_run
 ```
 
 Available flags: `--config`, `--eeg-filename-pattern`, `--sfreq`, `--tmin`, `--tmax`,
@@ -152,7 +153,7 @@ import TRF_sklearn
 def patched(*a, **k):
     c = load_config()
     c.subjects = ['Sub2']
-    c.paths.save_dir = Path('/tmp/scratch')   # keep test output out of pickles/
+    c.paths.save_dir = Path('/tmp/scratch')   # keep test output out of results/
     return c
 
 TRF_sklearn.load_config = patched

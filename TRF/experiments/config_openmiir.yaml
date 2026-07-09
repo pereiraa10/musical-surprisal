@@ -50,15 +50,14 @@
 # constraints (no musician label, fixed presentation order across subjects,
 # only 10/14 subjects present locally, etc.).
 #
-# Relative paths here are resolved against the parent of experiments/ (the
-# TRF/ directory) inside config.py's _resolve_paths() -- do NOT put absolute
-# paths here.
+# Relative paths here are resolved against experiments/ itself inside
+# config.py's _resolve_paths() -- do NOT put absolute paths here.
 
 paths:
-  data_root: "../../datasets/MIIR/openmiir"
+  data_root: "datasets/MIIR_dataset/openmiir"
   wav_subdir: ""   # trial_to_stimulus entries already include audio/full.vN/...
   eeg_subdir: ""   # data_root itself: eeg_filename_pattern already includes eeg/mne/...
-  save_dir_template: "pickles/encoding_openmiir_{date}"
+  save_dir_template: "results/encoding_openmiir_{date}"
   # No midi_subdir / pitch_surprisal_file / onset_surprisal_file: no
   # symbolic score for this dataset (see stimulus_source_type below).
 
