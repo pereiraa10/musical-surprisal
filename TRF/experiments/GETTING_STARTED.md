@@ -1,58 +1,61 @@
 # Getting Started — TRF Experiments
 
-`TRF/experiments/` is a self-contained pipeline (no dependency on the older top-level
-`TRF/*.py` scripts): one config file, one data-loading class (`TRFDataset`), and 4 model
-variants that all consume it identically.
+`TRF/experiments/` is a pipeline to train 4 neural encoding model variants on different EEG datasets of participants listening to music. 
+Datasets are saved in `/datasets/` folder and contain 3 datasets:
+- [liberi_dataset](https://datadryad.org/dataset/doi:10.5061/dryad.g1jwstqmh): 20 participants listening to midi piano recordings per [Di Liberti 2020](https://elifesciences.org/articles/51784) study
+- [MIIR_dataset](https://datadryad.org/dataset/doi:10.5061/dryad.g1jwstqmh): 10 participants listening to music from [Stober 2015](https://ismir2015.uma.es/articles/224_Paper.pdf) study on music imagery 
+- [daly_dataset](https://github.com/OpenNeuroDatasets/ds002725/tree/master): 10 participants listening to classical music from [Daly 2019](https://www.nature.com/articles/s41598-019-45105-2)
+
+Each dataset comes with its own config file which contains information on the parameters of each dataset. 
+
+Surprisal data is calculated based on the stimulus provided in the dataset using the [IDyOMpy](https://github.com/GuiMarion/IDyOMpy/tree/master/idyom) library. Set-up instructions are available in the respective repo. 
 
 ## Prerequisites
 
-- A Python environment with: `mne`, `eelbrain`, `torch`, `scipy`, `numpy`, `scikit-learn`,
-  `pretty_midi`, `pyyaml` (e.g. `conda activate eelbrain-env`, or your own env — if
-  `pyyaml` is missing: `pip install pyyaml`).
-- The dataset in place: `experiments/datasets/liberi_dataset/...` (EEG/wav/midi) and the
-  IDyOM surprisal `.mat` outputs at `experiments/datasets/liberi_dataset/surprisal_data/`
-  (paths come from `experiments/config.yaml`).
+- Make a conda python environment with requirements per `package-list.txt`
+  ```
+  conda create --name conda-env python=3.11 --file package-list.txt
+  
+  ```
 
 ## Running a model
 
-Run from `TRF/experiments/` — paths resolve from each file's own location
-(`experiments/`), not your current directory.
+To run all models on the Di Liberti dataset (default), run:
 
 ```bash
-cd musical-surprisal/TRF
+python run_all_models.py
+```
 
+To run individual models only, call their respective scripts: 
+
+```bash
 # Explicit Toeplitz ridge (own lag-matrix + own alpha search)
-python experiments/TRF_sklearn.py
+python TRF_sklearn.py
 
 # MNE ReceptiveField ridge (MNE's own internal lag-matrix + own alpha search)
-python experiments/TRF_mne.py
+python TRF_mne.py
 
 # eelbrain boosting TRF
-python experiments/TRF_boosting.py
+python TRF_boosting.py
 
 # Conv (windowed mini-batch SGD) — set MODEL_VARIANT inside the script first:
 # 'linear' | 'separable' | 'nonlinear'
-python experiments/TRF_conv.py
+python TRF_conv.py
 ```
 
-Each script loops over every subject in `config.subjects` and both conditions
-(`acoustic`, `acoustic_and_surprisal`), writing one pickle per (subject, condition[,
-variant]) to `config.paths.save_dir` (default `experiments/results/encoding_<today>/`), named
+Each script loops over every subject in `config.subjects` and all feature_sets provided 
+(default config compares 2 feature_sets: `acoustic`, `acoustic_and_surprisal`), writing one pickle per (subject, feature_set,
+[variant]) to `config.paths.save_dir` (default `experiments/results/encoding_<today>/`), named
 `{subject}__{model_family}[_{variant}]__{condition}.pkl`. See `results.py`'s module
 docstring for the full pickle schema, and `EVALUATION_NOTES.md` for how each model's
 evaluation protocol differs — read that before comparing r-values across scripts.
 
 ## Fast iteration
 
-Trim `config.yaml`'s `subjects:` list to one subject (e.g. just `Sub2`) for a quick
-end-to-end smoke test of any script. For the conv script, also lower `EPOCHS` near the
-top of `TRF_conv.py` (default 200).
-
 Inspect what config a script would actually resolve to, without running anything:
 
 ```bash
-python experiments/config.py
-python experiments/config.py --help          # list every overridable flag
+python config.py --help          # list every overridable flag
 ```
 
 ## Changing configuration
@@ -64,10 +67,11 @@ Three ways, in increasing order of permanence.
 Every script honors the same flags (they all call
 `config.load_config(cli_args=sys.argv[1:])`):
 
+For example: 
 ```bash
-python experiments/TRF_sklearn.py --sfreq 128 --tmin -0.2 --tmax 0.8
-python experiments/TRF_conv.py --window-samples 256 --hop-samples 128
-python experiments/TRF_mne.py --save-dir results/my_test_run
+python TRF_sklearn.py --sfreq 128 --tmin -0.2 --tmax 0.8
+python TRF_conv.py --window-samples 256 --hop-samples 128
+python TRF_mne.py --save-dir results/my_test_run
 ```
 
 Available flags: `--config`, `--eeg-filename-pattern`, `--sfreq`, `--tmin`, `--tmax`,
@@ -87,12 +91,11 @@ subjects:
 
 ### 3. Point at a different config file entirely
 
-Useful for a parallel experiment without touching the default:
+Use the different config files to source different datasets. 
 
 ```bash
-cp experiments/config.yaml experiments/config_lofi.yaml
-# edit config_lofi.yaml...
-python experiments/TRF_sklearn.py --config experiments/config_lofi.yaml
+
+python TRF_sklearn.py --config config_daly.yaml
 ```
 
 #### Running on OpenMIIR (`config_openmiir.yaml`)
@@ -105,59 +108,11 @@ the 10 subjects with local `.fif` files (P01, P04, P05, P06, P07, P09, P11, P12,
 P13, P14). Intended usage is the same `--config` pattern as any other dataset:
 
 ```bash
-cd musical-surprisal/TRF
-python experiments/TRF_sklearn.py --config experiments/config_openmiir.yaml
-python experiments/run_all_models.py --config experiments/config_openmiir.yaml
+
+python TRF_sklearn.py --config config_openmiir.yaml
+python run_all_models.py --config config_openmiir.yaml
 ```
 
-All 4 model scripts already pass `trial_to_stimulus` when calling
-`utils.load_subject_raw_eeg`:
-
-```python
-eeg_data = utils.load_subject_raw_eeg(
-    eeg_path, SUBJECT, config.trial_to_stimulus.get(SUBJECT))
-```
-
-at `TRF_sklearn.py:145`, `TRF_mne.py:120`, `TRF_boosting.py:136`, and
-`TRF_conv.py:459`. This is a no-op for `config.yaml`'s `.mat`-format
-liberi_dataset (`_load_eeg_from_mat` ignores the argument entirely), and is
-required for `stimulus_source_type: audio_files` datasets (`config_openmiir.yaml`,
-`config_daly.yaml`), which resolve it from each config's `trial_to_stimulus:`
-YAML section via `config.py`.
-
-### 4. Programmatic override (Python shell / notebook / one-off script)
-
-`load_config()` returns a plain `Config` dataclass — mutate it directly. How you inject
-it back depends on *when* a script loads config:
-
-`TRF_sklearn.py` / `TRF_mne.py` / `TRF_boosting.py` call `load_config()` lazily,
-inside `main()` — patch the module's `load_config` name before calling `main()`:
-
-```python
-from pathlib import Path
-from config import load_config
-import TRF_sklearn
-
-def patched(*a, **k):
-    c = load_config()
-    c.subjects = ['Sub2']
-    c.paths.save_dir = Path('/tmp/scratch')   # keep test output out of results/
-    return c
-
-TRF_sklearn.load_config = patched
-TRF_sklearn.main()
-```
-
-`TRF_conv.py` loads config once at *import time* (a module-level `config`
-object, since its architecture constants derive from it) — mutate that object directly:
-
-```python
-import TRF_conv as conv
-conv.config.subjects = ['Sub2']
-conv.config.conditions = {'acoustic': conv.config.conditions['acoustic']}
-conv.EPOCHS = 2          # script-level hyperparameters override the same way
-conv.main()
-```
 
 ### Model-specific hyperparameters (not in config.yaml)
 
@@ -172,7 +127,7 @@ knobs near its top.
 ## Smoke-testing the data pipeline alone (no model fitting)
 
 ```bash
-python experiments/dataset.py
+python dataset.py
 ```
 
 Loads Sub2, builds a `TRFDataset` in both full-trial and fixed-window modes, and asserts
