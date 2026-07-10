@@ -59,6 +59,8 @@ Consumption
     ds = TRFDataset('Sub2', eeg_data, 'acoustic', config, window_samples=None)
 """
 
+import sys
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset as TorchDataset
@@ -84,9 +86,17 @@ class PreparedSubject:
         is used (cached, so instances across a subject loop share one library).
     debug : bool
         Verbosity for the preprocessing/alignment steps.
+    preprocess_capture, align_capture : optional
+        Opt-in callbacks forwarded verbatim to utils.preprocess_eeg_trials
+        (capture=) and utils.align_stimulus_and_idyom (capture=) respectively.
+        Unused by every existing caller (defaults to None, identical to
+        before this parameter existed); intended for methods-figure
+        generation (see viz_smoke_test.py) that needs intermediate pipeline
+        stages without duplicating the pipeline's numeric logic.
     """
 
-    def __init__(self, subject, eeg_data, config, stimulus_library=None, debug=False):
+    def __init__(self, subject, eeg_data, config, stimulus_library=None, debug=False,
+                 preprocess_capture=None, align_capture=None):
         self.subject = subject
         self.config = config
         self.debug = debug
@@ -95,10 +105,12 @@ class PreparedSubject:
         # 1. per-trial LPF -> downsample -> HPF -> strip padding
         preprocessed_trials = utils.preprocess_eeg_trials(
             eeg_data, target_fs=config.sfreq,
-            lpf_hz=config.high_frequency, hpf_hz=config.low_frequency, debug=debug)
+            lpf_hz=config.high_frequency, hpf_hz=config.low_frequency, debug=debug,
+            capture=preprocess_capture)
         # 2. concatenate into an MNE RawArray with trial-onset stim markers
         raw = utils.create_mne_raw_from_preprocessed(
             preprocessed_trials, config.sfreq, eeg_data['chanlocs'])
+        self.raw = raw
         # 3. eelbrain events
         self.events = utils.create_eelbrain_events(raw)
         # 4. shared stimulus / IDyOM library (cached across subjects)
@@ -124,7 +136,8 @@ class PreparedSubject:
         utils.align_stimulus_and_idyom(
             self.events, preprocessed_trials, self._lib, subject, config.sfreq,
             config.trial_to_song_id, surprisal_keys,
-            stimulus_paths=eeg_data.get('stimulus_paths'), debug=debug)
+            stimulus_paths=eeg_data.get('stimulus_paths'), debug=debug,
+            capture=align_capture)
         # 6. per-trial numpy assembly (all features, not yet z-scored)
         (self._trials_raw, self.sensor_dim,
          self.channel_names, self.n_channels) = utils.build_trials(
@@ -339,3 +352,18 @@ if __name__ == '__main__':
     print("[direct constructor] TRFDataset(...) still works standalone: OK")
 
     print("SMOKE TEST PASSED")
+
+    # ── methodology figures (opt-in via --visualize, default on; pass
+    # --no-visualize for a fast CI-style run of just the assertions above) ──
+    VISUALIZE = '--no-visualize' not in sys.argv
+    if VISUALIZE:
+        try:
+            import viz_smoke_test
+        except ImportError as e:
+            print(f"\n[viz] skipping figure generation: could not import a required "
+                  f"dependency ({type(e).__name__}: {e}). Run with --no-visualize to "
+                  "skip this step, or install the missing package(s).")
+        else:
+            viz_smoke_test.run()
+    else:
+        print("\n[viz] --no-visualize passed: skipping figure generation.")

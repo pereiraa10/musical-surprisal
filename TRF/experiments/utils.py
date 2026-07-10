@@ -43,7 +43,7 @@ def zscore(x):
     return (x - x.mean(axis=0)) / x.std(axis=0)
 
 
-def compute_envelope_from_audio(path, target_fs):
+def compute_envelope_from_audio(path, target_fs, capture=None):
     """Broadband amplitude envelope of an audio file (.wav/.mp3/...),
     resampled to `target_fs`. Used when a dataset ships raw stimulus audio
     instead of a precomputed envelope (e.g. no equivalent of liberi's
@@ -54,11 +54,19 @@ def compute_envelope_from_audio(path, target_fs):
     Uses soundfile (libsndfile, incl. its mp3 support) rather than
     librosa.load: librosa's audio-loading path unconditionally imports numba,
     which at the time of writing rejects the numpy version this project
-    otherwise pins, making librosa.load unusable in that environment."""
+    otherwise pins, making librosa.load unusable in that environment.
+
+    capture : optional callable(audio, sr, envelope_native) invoked after the
+        Hilbert envelope is computed but before resampling -- lets a caller
+        (e.g. a methods-figure generator) see the native-rate waveform and
+        envelope without changing the returned (already-resampled) value.
+    """
     audio, sr = sf.read(str(path), always_2d=False)
     if audio.ndim > 1:
         audio = audio.mean(axis=1)  # downmix to mono
     envelope = np.abs(hilbert(audio.astype(np.float64)))
+    if capture is not None:
+        capture(audio, sr, envelope)
     g = gcd(target_fs, sr)
     return resample_poly(envelope, target_fs // g, sr // g)
 
@@ -154,6 +162,25 @@ def load_subject_raw_eeg(filepath, subject, trial_to_stimulus=None):
     return _load_eeg_from_other_format(filepath, subject, trial_to_stimulus)
 
 
+# liberi_dataset's CND .mat ships EEGLAB-style chanlocs whose X/Y/Z are
+# unit-sphere direction cosines (norm([X,Y,Z]) ~= 1.0 for every channel --
+# confirmed empirically against dataSub1.mat), NOT head-frame metres. Passing
+# these straight through as if they were metres makes any montage built from
+# them ~10x too large relative to a real adult head (~0.095 m scalp radius),
+# which is why mne.viz.plot_sensors previously drew a normal-sized head
+# outline inside a wildly oversized, off-scale sensor ring. Rescale onto a
+# plausible head radius here so eeg_data['chanlocs'] is metre-scale
+# regardless of source format -- consistent with what _load_eeg_from_edf /
+# _load_eeg_from_fif already provide (real metre-scale positions pulled from
+# MNE standard montages). This only affects sensor-position metadata used for
+# montage/topomap-style plotting; no other code in this repo reads chanlocs
+# X/Y/Z numerically (create_mne_raw_from_preprocessed only feeds them to
+# mne's montage, which none of TRF_conv.py/TRF_mne.py/TRF_sklearn.py/
+# TRF_boosting.py/results.py/compare_models.py subsequently consumes), so
+# this does not change any numeric EEG/feature/TRF output.
+_EEGLAB_UNIT_SPHERE_HEAD_RADIUS_M = 0.095
+
+
 def _load_eeg_from_mat(filepath, subject):
     """Load raw EEG from a CNSP-style .mat file at its original sampling
     frequency — NO resampling.
@@ -171,10 +198,18 @@ def _load_eeg_from_mat(filepath, subject):
         # pre-processing standard in the CNSP MATLAB pipeline.
         eeg.data[i] = 100 * eeg.data[i].astype(np.float32) / np.iinfo(np.int32).max
 
+    # See _EEGLAB_UNIT_SPHERE_HEAD_RADIUS_M above: rescale from unit-sphere
+    # direction cosines onto a plausible head radius in metres.
+    r = _EEGLAB_UNIT_SPHERE_HEAD_RADIUS_M
+    chanlocs = [
+        SimpleNamespace(labels=c.labels, X=c.X * r, Y=c.Y * r, Z=c.Z * r)
+        for c in eeg.chanlocs
+    ]
+
     eeg_data = {
         'trials': eeg.data,
         'fs': orig_fs,                              # original fs; no resampling done
-        'chanlocs': eeg.chanlocs,
+        'chanlocs': chanlocs,
         'pad_start': int(eeg.paddingStartSample),    # in original-fs samples
     }
 
@@ -436,7 +471,7 @@ def _load_eeg_from_fif(filepath, subject, trial_to_stimulus):
     return eeg_data
 
 
-def preprocess_eeg_trials(eeg_data, target_fs, lpf_hz, hpf_hz, debug=False):
+def preprocess_eeg_trials(eeg_data, target_fs, lpf_hz, hpf_hz, debug=False, capture=None):
     """Preprocess EEG trials independently, replicating the MATLAB CNSP workflow:
 
       Step 1 — LPF  each trial at original fs
@@ -448,6 +483,15 @@ def preprocess_eeg_trials(eeg_data, target_fs, lpf_hz, hpf_hz, debug=False):
     filter transients from one trial bleeding into the next. Padding is
     removed last so the filters settle through it rather than cold-starting at
     the real signal boundary.
+
+    capture : optional callable(trial_idx, stage, array_or_dict) invoked at
+        each intermediate stage without altering the returned value -- lets a
+        caller (e.g. a methods-figure generator) see the signal after LPF,
+        after downsampling, after HPF, and after padding removal. Called once
+        up front with (None, 'meta', {...}) carrying the scalar settings
+        (orig_fs, target_fs, pad_start_orig, pad_start_target, lpf_hz,
+        hpf_hz), then per trial with stage in
+        {'raw', 'lpf', 'downsampled', 'hpf', 'final'}.
     """
     trials = eeg_data['trials']
     orig_fs = eeg_data['fs']
@@ -466,6 +510,13 @@ def preprocess_eeg_trials(eeg_data, target_fs, lpf_hz, hpf_hz, debug=False):
     nyq_tgt = target_fs / 2.0
     hpf_sos = butter(4, hpf_hz / nyq_tgt, btype='high', output='sos')
 
+    if capture is not None:
+        capture(None, 'meta', {
+            'orig_fs': orig_fs, 'target_fs': target_fs,
+            'pad_start_orig': pad_start_orig, 'pad_start_target': pad_start_target,
+            'lpf_hz': lpf_hz, 'hpf_hz': hpf_hz,
+        })
+
     preprocessed_trials = []
     for i, trial in enumerate(trials):
         trial_f64 = trial.astype(np.float64)   # (n_time, n_channels)
@@ -483,6 +534,13 @@ def preprocess_eeg_trials(eeg_data, target_fs, lpf_hz, hpf_hz, debug=False):
             n_out = trial_clean.shape[0]
             print(f"  [pre] Trial {i+1}: post-preproc = {n_out} samples "
                   f"@ {target_fs} Hz")
+
+        if capture is not None:
+            capture(i, 'raw', trial_f64)
+            capture(i, 'lpf', trial_lpf)
+            capture(i, 'downsampled', trial_down)
+            capture(i, 'hpf', trial_hpf)
+            capture(i, 'final', trial_clean)
 
         preprocessed_trials.append(trial_clean)
 
@@ -715,11 +773,22 @@ def get_stimulus_library(config):
         config.ic_clip, str(config.paths.midi_dir))
 
 
-# ── Stimulus/IDyOM alignment + trial assembly (former Dataset methods) ──────────
+# ── Stimulus/IDyOM alignment + trial assembly ──────────
+
+# Auditory-ERP-plausible lag window for align_stimulus_and_idyom's debug/
+# capture cross-correlation peak search (see its 'xcorr' stage below): N1/P2-
+# style responses to an acoustic onset land within roughly this range, so a
+# genuine EEG/stimulus alignment's peak should too. Restricting the search to
+# this window (rather than the full ±trial-duration lag range) avoids a
+# rhythmically periodic, multi-minute musical trial's own comb-like
+# autocorrelation structure from winning the global argmax.
+_XCORR_ERP_LAG_MIN_MS = -100
+_XCORR_ERP_LAG_MAX_MS = 600
+
 
 def align_stimulus_and_idyom(events, preprocessed_trials, lib, subject, sfreq,
                              trial_to_song_id_table, surprisal_feature_keys,
-                             stimulus_paths=None, debug=False):
+                             stimulus_paths=None, debug=False, capture=None):
     """Resample the stimulus envelopes to `sfreq`, align each to its EEG trial
     length, derive onsets, and place the IDyOM surprisal/entropy features onto
     the same grid. Mutates `events` in place (adds 'envelope', 'onsets',
@@ -730,7 +799,16 @@ def align_stimulus_and_idyom(events, preprocessed_trials, lib, subject, sfreq,
         `lib` (see _StimulusLibrary), where trial_idx alone isn't enough to
         find the right file; ignored by a 'mat'-mode `lib`.
 
-    Standalone version of the former Dataset._align_stimulus_and_idyom method.
+    capture : optional callable(trial_idx, stage, payload_dict) invoked per
+        trial without altering any returned/mutated value -- lets a caller
+        (e.g. a methods-figure generator) see the pre-trim envelope, the
+        length mismatch against EEG, and the EEG/envelope cross-correlation
+        used for alignment QA. stage 'alignment' always fires (payload keys:
+        env_raw, env_resampled_full, env_resampled_trimmed, n_eeg, n_min,
+        diff, stim_fs, already_at_target_fs); stage 'xcorr' fires whenever
+        debug or capture is set (payload keys: xcorr, lag_smp, lag_ms, n_min).
+
+
     """
     eeg_trial_lengths = [t.shape[0] for t in preprocessed_trials]
     already_at_target_fs = getattr(lib, 'source_type', 'mat') == 'audio_files'
@@ -746,6 +824,7 @@ def align_stimulus_and_idyom(events, preprocessed_trials, lib, subject, sfreq,
         # sample rate, so there's no single up/down ratio to apply here).
         env_resampled = env_raw if already_at_target_fs else \
             resample_poly(env_raw, lib.stim_up, lib.stim_down)
+        env_resampled_full = env_resampled
 
         # Trim to the shorter of stim/EEG, matching MATLAB's min(envLen, eegLen).
         # A ~1s mismatch is normal (the EEG recording overruns the audio
@@ -763,16 +842,55 @@ def align_stimulus_and_idyom(events, preprocessed_trials, lib, subject, sfreq,
                   f"n_min={n_min} (diff={diff} smp, {diff*1000/sfreq:.1f} ms)")
         env_resampled = env_resampled[:n_min]
 
-        if debug:
+        if capture is not None:
+            capture(i, 'alignment', {
+                'env_raw': env_raw,
+                'env_resampled_full': env_resampled_full,
+                'env_resampled_trimmed': env_resampled,
+                'n_eeg': n_eeg,
+                'n_min': n_min,
+                'diff': diff,
+                'stim_fs': getattr(lib, 'stim_fs', sfreq),
+                'already_at_target_fs': already_at_target_fs,
+            })
+
+        if debug or capture is not None:
             eeg_ch0 = preprocessed_trials[i][:n_min, 0]
             sig_a = (env_resampled - env_resampled.mean()) / (env_resampled.std() + 1e-12)
             sig_b = (eeg_ch0 - eeg_ch0.mean()) / (eeg_ch0.std() + 1e-12)
             xcorr = np.correlate(sig_b, sig_a, mode='full')
-            lag_smp = int(np.argmax(xcorr)) - (n_min - 1)
+            zero_lag_idx = n_min - 1
+
+            # Restrict the peak search to a physiologically plausible
+            # auditory-ERP lag window (see _XCORR_ERP_LAG_MIN_MS/MAX_MS
+            # above) rather than the global argmax over the full ±trial-
+            # duration lag range. For a multi-minute, rhythmically regular
+            # musical trial (e.g. liberi_dataset's ~2-3 min Bach chorales),
+            # the stimulus envelope's own periodicity makes the full-range
+            # cross-correlation comb-like -- lots of near-equal side lobes
+            # spaced at the beat/bar period, so a global argmax is often just
+            # noise picking whichever cycle happens to be tallest, not the
+            # true EEG/stimulus alignment. Short trials (e.g. OpenMIIR's
+            # ~10-16 s melodies) don't have enough repetitions for this to
+            # dominate, which is why they look comparatively calm even though
+            # the underlying computation is identical.
+            lo = max(0, zero_lag_idx + int(round(_XCORR_ERP_LAG_MIN_MS / 1000.0 * sfreq)))
+            hi = min(len(xcorr), zero_lag_idx + int(round(_XCORR_ERP_LAG_MAX_MS / 1000.0 * sfreq)) + 1)
+            xcorr_erp = xcorr[lo:hi]
+            lag_smp = int(np.argmax(xcorr_erp)) + lo - zero_lag_idx
             lag_ms = lag_smp * 1000.0 / sfreq
-            ok = -200 <= lag_ms <= 600
-            print(f"  [xcorr] Trial {i}: peak lag = {lag_smp} smp "
-                  f"({lag_ms:.1f} ms)  {'[OK]' if ok else '[WARNING: implausible]'}")
+            ok = _XCORR_ERP_LAG_MIN_MS <= lag_ms <= _XCORR_ERP_LAG_MAX_MS
+            if debug:
+                print(f"  [xcorr] Trial {i}: peak lag (within "
+                      f"[{_XCORR_ERP_LAG_MIN_MS}, {_XCORR_ERP_LAG_MAX_MS}] ms window) "
+                      f"= {lag_smp} smp ({lag_ms:.1f} ms)  "
+                      f"{'[OK]' if ok else '[WARNING: implausible]'}")
+            if capture is not None:
+                capture(i, 'xcorr', {
+                    'xcorr': xcorr, 'zero_lag_idx': zero_lag_idx,
+                    'xcorr_erp': xcorr_erp, 'erp_lo': lo, 'erp_hi': hi,
+                    'lag_smp': lag_smp, 'lag_ms': lag_ms, 'n_min': n_min,
+                })
 
         time_axis = eelbrain.UTS(0, 1 / sfreq, n_min)
         envelopes.append(eelbrain.NDVar(env_resampled, (time_axis,)))
