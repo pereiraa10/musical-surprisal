@@ -57,6 +57,8 @@ paths:
   data_root: "datasets/MIIR_dataset/openmiir"
   wav_subdir: ""   # trial_to_stimulus entries already include audio/full.vN/...
   eeg_subdir: ""   # data_root itself: eeg_filename_pattern already includes eeg/mne/...
+  pitch_surprisal_file: "datasets/MIIR_dataset/surprisal_data/mixed2_quantization_24_maxOrder_20_viewpoints_pitch.mat"
+  onset_surprisal_file: "datasets/MIIR_dataset/surprisal_data/mixed2_quantization_24_maxOrder_20_viewpoints_length.mat"
   save_dir_template: "results/encoding_openmiir_{date}"
   # No midi_subdir / pitch_surprisal_file / onset_surprisal_file: no
   # symbolic score for this dataset (see stimulus_source_type below).
@@ -75,15 +77,15 @@ stimulus_source_type: audio_files
 # design rather than simply not downloaded).
 subjects:
   - P01
-  - P04
-  - P05
-  - P06
-  - P07
-  - P09
-  - P11
-  - P12
-  - P13
-  - P14
+  # - P04
+  # - P05
+  # - P06
+  # - P07
+  # - P09
+  # - P11
+  # - P12
+  # - P13
+  # - P14
 
 # PLACEHOLDER -- see header note above: OpenMIIR has no binary
 # musician/non-musician label like liberi_dataset. A continuous score exists
