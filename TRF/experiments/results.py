@@ -53,9 +53,25 @@ from scipy.stats import pearsonr
 import matplotlib
 matplotlib.use('Agg')   # non-interactive backend; safe on headless machines
 import matplotlib.pyplot as plt
+import eelbrain
 
 DEFAULT_SFREQ = 64
 DEFAULT_CHANNEL_IDX = 0
+
+# Mirrors the tmin/tmax receptive-field convention shared by every config.yaml
+# in this project (-0.1 / 0.6 s, i.e. a 700 ms window) -- used as the ERP
+# window length for the grand-average topo plots below, not as a literal
+# pre-stimulus slice (see _grand_average_ndvars).
+DEFAULT_TMIN = -0.1
+DEFAULT_TMAX = 0.600
+
+# Tried in order to reconstruct sensor positions from meta['channel_names']
+# alone (no montage/positions are saved in the pickle). biosemi64 is
+# confirmed correct for the OpenMIIR dataset (config_openmiir.yaml); the
+# others cover datasets loaded via _load_eeg_from_edf/_load_eeg_from_mat
+# whose channel naming hasn't been verified against a standard montage.
+_CANDIDATE_MONTAGES = ['biosemi64', 'standard_1020', 'standard_1005']
+_TOPOARRAY_TIME_FRACTIONS = (0.15, 0.5, 0.85)  # fractions of window duration
 
 
 def result_filename(save_dir, subject, model_family, feature_set, variant=None):
@@ -220,8 +236,127 @@ def plot_alignment(result, save_dir, channel_idx=DEFAULT_CHANNEL_IDX, sfreq=DEFA
     return fname
 
 
+def _build_sensor(channel_names):
+    """eelbrain.Sensor reconstructed from channel *names* alone (the pickle
+    schema doesn't save positions/montage) by matching against a short list
+    of candidate standard montages. Raises if none of them cover every name
+    in `channel_names` -- add the dataset's real montage to
+    _CANDIDATE_MONTAGES rather than silently guessing."""
+    errors = []
+    for montage in _CANDIDATE_MONTAGES:
+        try:
+            return eelbrain.Sensor.from_montage(montage, channels=channel_names)
+        except ValueError as e:
+            errors.append(f"{montage}: {e}")
+    raise ValueError(
+        f"None of the candidate montages {_CANDIDATE_MONTAGES} contain all "
+        f"channel names {channel_names}. Add the correct montage to "
+        f"_CANDIDATE_MONTAGES in results.py. Errors: {errors}"
+    )
+
+
+def _build_case_ndvars(result, sfreq, tmin=DEFAULT_TMIN, tmax=DEFAULT_TMAX):
+    """Y_true/Y_pred for every trial, as a pair of (case, sensor, time)
+    NDVars -- one Case per trial, not pre-averaged. eelbrain.plot.TopoButterfly
+    / TopoArray average over the Case dimension themselves when rendering, so
+    no manual averaging happens here.
+
+    Each trial is truncated to its first (tmax - tmin) seconds (700 ms by
+    default, matching this project's TRF tmin/tmax receptive-field
+    convention) so every trial contributes a NDVar of the same length; every
+    trial in this dataset is far longer than that, so this never runs past a
+    trial's end. Windows start at 0 (trial/stimulus onset), not tmin: the
+    saved Y_true/Y_pred arrays only cover each trial's own span (see
+    build_trials), so there's no genuine pre-stimulus baseline to slice for
+    tmin < 0 -- indices before a trial's start in the concatenated array
+    belong to a different trial (or don't exist, for the first trial).
+    (tmax - tmin) is used purely as the window *length*; tmin/tmax themselves
+    are passed to the plot functions' `xlim` so the displayed time axis
+    still reads in the -100 ms .. +600 ms convention.
+
+    Returns None (skip) under the same condition plot_alignment skips under
+    -- no Y_true/Y_pred (the eelbrain.boosting exception) -- or if
+    trial_boundaries wasn't saved.
+
+    Returns (nd_true, nd_pred, meta, model_tag).
+    """
+    Y_true, Y_pred = result['Y_true'], result['Y_pred']
+    trial_boundaries = result['meta'].get('trial_boundaries')
+    if Y_true is None or Y_pred is None or trial_boundaries is None:
+        return None
+
+    meta = result['meta']
+    model_tag = meta['model_family']
+    if meta.get('model_variant'):
+        model_tag = f"{model_tag}_{meta['model_variant']}"
+
+    n_window = min(
+        round((tmax - tmin) * sfreq),
+        min(end - start for start, end in trial_boundaries))
+    sensor = _build_sensor(meta['channel_names'])
+    time_axis = eelbrain.UTS(0, 1 / sfreq, n_window)
+
+    def case_ndvar(Y, name):
+        arrs = np.stack([Y[start:start + n_window] for start, _ in trial_boundaries])
+        return eelbrain.NDVar(
+            arrs.transpose(0, 2, 1), (eelbrain.Case, sensor, time_axis), name=name)
+
+    nd_true = case_ndvar(Y_true, 'Actual')
+    nd_pred = case_ndvar(Y_pred, 'Predicted')
+    return nd_true, nd_pred, meta, model_tag
+
+
+def plot_topobutterfly(result, save_dir, sfreq=DEFAULT_SFREQ,
+                        tmin=DEFAULT_TMIN, tmax=DEFAULT_TMAX):
+    """Actual-vs-predicted ERP as an eelbrain TopoButterfly: all channels
+    overlaid, plus a scalp topomap. Feeds every trial's Y_true/Y_pred to
+    TopoButterfly directly (as a Case dimension) and lets it average over
+    trials and pick the topomap time itself -- no manual averaging or
+    peak-time computation here. tmin/tmax set the displayed window
+    (xlim), matching this project's TRF receptive-field convention."""
+    built = _build_case_ndvars(result, sfreq, tmin=tmin, tmax=tmax)
+    if built is None:
+        return
+    nd_true, nd_pred, meta, model_tag = built
+    subject, feature_set = meta['subject'], meta['feature_set']
+
+    title = f'{subject}  ·  {model_tag}  ·  {feature_set}'
+    p = eelbrain.plot.TopoButterfly(
+        [nd_true, nd_pred], xlim=(tmin, tmax), w=10, h=4, clip='circle',
+        show=False, title=title)
+    fname = save_dir / f"{subject}_{feature_set}_{model_tag}_topobutterfly.png"
+    p.save(fname)
+    p.close()
+    return fname
+
+
+def plot_topoarray(result, save_dir, sfreq=DEFAULT_SFREQ,
+                    tmin=DEFAULT_TMIN, tmax=DEFAULT_TMAX):
+    """Actual-vs-predicted ERP as an eelbrain TopoArray: scalp topomaps at a
+    few representative times spread across the tmin/tmax window. Feeds every
+    trial's Y_true/Y_pred to TopoArray directly (as a Case dimension) and
+    lets it average over trials -- no manual averaging here."""
+    built = _build_case_ndvars(result, sfreq, tmin=tmin, tmax=tmax)
+    if built is None:
+        return
+    nd_true, nd_pred, meta, model_tag = built
+    subject, feature_set = meta['subject'], meta['feature_set']
+
+    times = [tmin + f * (tmax - tmin) for f in _TOPOARRAY_TIME_FRACTIONS]
+    title = f'{subject}  ·  {model_tag}  ·  {feature_set}'
+    p = eelbrain.plot.TopoArray(
+        [nd_true, nd_pred], t=times, xlim=(tmin, tmax), w=6, h=4, clip='circle',
+        show=False, title=title)
+    fname = save_dir / f"{subject}_{feature_set}_{model_tag}_topoarray.png"
+    p.save(fname)
+    p.close()
+    return fname
+
+
 def save_result(path, result, channel_idx=DEFAULT_CHANNEL_IDX, sfreq=DEFAULT_SFREQ):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'wb') as f:
         pickle.dump(result, f)
     plot_alignment(result, path.parent, channel_idx=channel_idx, sfreq=sfreq)
+    plot_topobutterfly(result, path.parent, sfreq=sfreq)
+    plot_topoarray(result, path.parent, sfreq=sfreq)
